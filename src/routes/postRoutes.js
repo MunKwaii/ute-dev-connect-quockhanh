@@ -27,6 +27,29 @@ router.post(
   postController.addPost
 );
 
+// Tài: đặt các route cụ thể trước /:id
+// @route   PUT /api/posts/like/:id
+// @desc    Like / Unlike bài viết
+// @access  Private
+router.put('/like/:id', verifyToken, postController.likePost);
+
+// @route   POST /api/posts/comment/:id
+// @desc    Thêm bình luận vào bài viết
+// @access  Private
+router.post(
+  '/comment/:id',
+  [
+    verifyToken,
+    [
+      check('text', 'Nội dung bình luận không được để trống')
+        .trim()
+        .not()
+        .isEmpty(),
+    ],
+  ],
+  postController.addComment
+);
+
 // @route   GET /api/posts/:id
 // @desc    Lấy bài viết theo ID
 // @access  Public

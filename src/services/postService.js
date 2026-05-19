@@ -41,11 +41,28 @@ const getPostById = async (postId) => {
   }
 };
 
-const getAllPosts = async () => {
+const getAllPosts = async (page = 1, limit = 5) => {
   try {
-    // Lấy toàn bộ bài viết, sắp xếp theo ngày mới nhất (tham khảo devconnector)
-    const posts = await Post.find().sort({ date: -1 });
-    return posts;
+    const skip = (page - 1) * limit;
+    
+    // Lấy danh sách bài viết theo phân trang (sắp xếp theo ngày mới nhất)
+    // Lưu ý: Bài báo cáo yêu cầu .sort({ date: 1 }) nhưng để hiển thị bài mới nhất thì thường dùng -1
+    const posts = await Post.find()
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
+      
+    // Tính tổng số bài viết
+    const total = await Post.countDocuments();
+    
+    // Kiểm tra xem còn bài viết để tải không
+    const hasMore = total > skip + posts.length;
+
+    return {
+      posts,
+      hasMore,
+      total
+    };
   } catch (error) {
     throw error;
   }

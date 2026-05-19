@@ -58,8 +58,84 @@ const getAllProfiles = async () => {
     }
 };
 
+const getTopDevelopers = async () => {
+    try {
+        const developers = await Profile.aggregate([
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "user",
+                    foreignField: "_id",
+                    as: "userDetails"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$userDetails",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $lookup: {
+                    from: "posts",
+                    localField: "user",
+                    foreignField: "user",
+                    as: "posts"
+                }
+            },
+            {
+                $addFields: {
+                    postCount: { $size: "$posts" },
+                    skillsCount: { $size: { $ifNull: ["$skills", []] } },
+                    experienceCount: { $size: { $ifNull: ["$experience", []] } }
+                }
+            },
+            {
+                $sort: {
+                    postCount: -1,
+                    skillsCount: -1,
+                    experienceCount: -1
+                }
+            },
+            {
+                $limit: 10
+            },
+            {
+                $project: {
+                    user: {
+                        _id: "$userDetails._id",
+                        name: "$userDetails.name",
+                        avatar: "$userDetails.avatar"
+                    },
+                    faculty: 1,
+                    classCode: 1,
+                    company: 1,
+                    website: 1,
+                    location: 1,
+                    status: 1,
+                    skills: 1,
+                    bio: 1,
+                    githubusername: 1,
+                    experience: 1,
+                    education: 1,
+                    social: 1,
+                    date: 1,
+                    postCount: 1,
+                    skillsCount: 1,
+                    experienceCount: 1
+                }
+            }
+        ]);
+        return developers;
+    } catch (error) {
+        throw error;
+    }
+};
+
 module.exports = {
     updateUserProfile,
     getProfileByUserId,
-    getAllProfiles
+    getAllProfiles,
+    getTopDevelopers
 };
+

@@ -29,10 +29,16 @@ router.get('/profile/me', verifyToken, profileController.getCurrentProfile);
 // @access  Public
 router.get('/profile', profileController.getAllProfiles);
 
+// @route   GET /api/profile/top-developers
+// @desc    Lấy top 10 lập trình viên nổi bật
+// @access  Public
+router.get('/profile/top-developers', profileController.getTopDevelopers);
+
 // @route   GET /api/profile/user/:user_id
 // @desc    Lấy hồ sơ người dùng theo user ID
 // @access  Public
 router.get('/profile/user/:user_id', profileController.getProfileById);
+
 
 // ==========================================
 // CÁC ROUTE PHÂN QUYỀN (Từ nhánh feature/login của bạn)

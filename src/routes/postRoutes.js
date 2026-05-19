@@ -27,9 +27,15 @@ router.post(
   postController.addPost
 );
 
+// @route   GET /api/posts/top-trending
+// @desc    Lấy top 10 bài viết nổi bật (nhiều likes/comments nhất)
+// @access  Public
+router.get('/top-trending', postController.getTopTrendingPosts);
+
 // @route   GET /api/posts/:id
 // @desc    Lấy bài viết theo ID
 // @access  Public
 router.get('/:id', postController.getPost);
 
 module.exports = router;
+

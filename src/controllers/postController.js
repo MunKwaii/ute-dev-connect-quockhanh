@@ -78,8 +78,27 @@ const getAllPosts = async (req, res) => {
   }
 };
 
+// @desc    Lấy top 10 bài viết nổi bật (nhiều likes/comments nhất)
+const getTopTrendingPosts = async (req, res) => {
+  try {
+    const posts = await postService.getTopTrendingPosts();
+    res.status(200).json({
+      success: true,
+      data: posts
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi Server'
+    });
+  }
+};
+
 module.exports = {
   addPost,
   getPost,
-  getAllPosts
+  getAllPosts,
+  getTopTrendingPosts
 };
+

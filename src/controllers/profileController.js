@@ -117,9 +117,26 @@ const getProfileById = async (req, res) => {
     }
 };
 
+/**
+ * Controller: Lấy top 10 lập trình viên nổi bật
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const getTopDevelopers = async (req, res) => {
+    try {
+        const developers = await profileService.getTopDevelopers();
+        return res.status(200).json(developers);
+    } catch (error) {
+        console.error('Lỗi ở getTopDevelopers controller:', error.message);
+        return res.status(500).json({ msg: 'Lỗi máy chủ (Server Error)' });
+    }
+};
+
 module.exports = {
     editProfile,
     getCurrentProfile,
     getAllProfiles,
-    getProfileById
+    getProfileById,
+    getTopDevelopers
 };
+

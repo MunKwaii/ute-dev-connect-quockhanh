@@ -68,8 +68,36 @@ const getAllPosts = async (page = 1, limit = 5) => {
   }
 };
 
+const getTopTrendingPosts = async () => {
+  try {
+    const posts = await Post.aggregate([
+      {
+        $addFields: {
+          likesCount: { $size: { $ifNull: ["$likes", []] } },
+          commentsCount: { $size: { $ifNull: ["$comments", []] } }
+        }
+      },
+      {
+        $sort: {
+          likesCount: -1,
+          commentsCount: -1,
+          date: -1
+        }
+      },
+      {
+        $limit: 10
+      }
+    ]);
+    return posts;
+  } catch (error) {
+    throw error;
+  }
+};
+
 module.exports = {
   createPost,
   getPostById,
-  getAllPosts
+  getAllPosts,
+  getTopTrendingPosts
 };
+

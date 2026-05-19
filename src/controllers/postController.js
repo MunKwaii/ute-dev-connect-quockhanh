@@ -57,10 +57,17 @@ const getPost = async (req, res) => {
 // @desc    Lấy tất cả bài viết
 const getAllPosts = async (req, res) => {
   try {
-    const posts = await postService.getAllPosts();
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 5;
+
+    const result = await postService.getAllPosts(page, limit);
     res.status(200).json({
       success: true,
-      data: posts
+      data: result.posts,
+      hasMore: result.hasMore,
+      total: result.total,
+      page,
+      limit
     });
   } catch (err) {
     console.error(err.message);

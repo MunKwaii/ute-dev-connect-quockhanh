@@ -4,13 +4,16 @@ const Message = require('../models/Message');
 // Lấy danh sách phòng chat của user hiện tại
 exports.getConversations = async (req, res) => {
   try {
+    console.log("=> GET /chat/conversations, req.user.id:", req.user.id);
+    
     const conversations = await Conversation.find({
-      participants: req.user.id
+      participants: { $in: [req.user.id] }
     })
       .populate('participants', 'name avatar email') // Giả sử model user có các field này
       .populate('lastMessage')
       .sort({ updatedAt: -1 });
 
+    console.log("=> Found conversations:", conversations.length);
     res.status(200).json(conversations);
   } catch (error) {
     console.error('Lỗi khi lấy danh sách phòng chat:', error);

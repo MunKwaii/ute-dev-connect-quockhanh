@@ -94,10 +94,65 @@ const getTopTrendingPosts = async () => {
   }
 };
 
+const toggleSavePost = async (userId, postId) => {
+  const post = await Post.findById(postId);
+
+  if (!post) {
+    const error = new Error('Không tìm thấy bài viết');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const user = await User.findById(userId);
+
+  if (!user) {
+    const error = new Error('Không tìm thấy người dùng');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const isSaved = user.savedPosts.some(
+    (savedPostId) => savedPostId.toString() === postId
+  );
+
+  if (isSaved) {
+    user.savedPosts = user.savedPosts.filter(
+      (savedPostId) => savedPostId.toString() !== postId
+    );
+  } else {
+    user.savedPosts.unshift(postId);
+  }
+
+  await user.save();
+
+  return {
+    isSaved: !isSaved,
+    savedPosts: user.savedPosts,
+    postId
+  };
+};
+
+const getSavedPosts = async (userId) => {
+  const user = await User.findById(userId).populate({
+    path: 'savedPosts',
+    options: { sort: { date: -1 } }
+  });
+
+  if (!user) {
+    const error = new Error('Không tìm thấy người dùng');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return user.savedPosts;
+};
+
 module.exports = {
   createPost,
   getPostById,
   getAllPosts,
-  getTopTrendingPosts
+  getTopTrendingPosts,
+  toggleSavePost,
+  getSavedPosts
 };
 

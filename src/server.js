@@ -18,6 +18,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api', require('./routes/profileRoutes'));
 app.use('/api/posts', require('./routes/postRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
 
 const http = require('http');
 const { Server } = require('socket.io');

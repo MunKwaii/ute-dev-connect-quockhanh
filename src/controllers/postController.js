@@ -95,10 +95,64 @@ const getTopTrendingPosts = async (req, res) => {
   }
 };
 
+const savePost = async (req, res) => {
+  try {
+    const result = await postService.toggleSavePost(req.user.id, req.params.id);
+
+    res.status(200).json({
+      success: true,
+      message: result.isSaved
+        ? 'Đã lưu bài viết'
+        : 'Đã bỏ lưu bài viết',
+      data: result
+    });
+  } catch (err) {
+    console.error(err.message);
+
+    if (err.statusCode === 404 || err.statusCode === 400) {
+      return res.status(err.statusCode).json({
+        success: false,
+        message: err.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi Server'
+    });
+  }
+};
+
+const getSavedPosts = async (req, res) => {
+  try {
+    const posts = await postService.getSavedPosts(req.user.id);
+
+    res.status(200).json({
+      success: true,
+      data: posts
+    });
+  } catch (err) {
+    console.error(err.message);
+
+    if (err.statusCode === 404 || err.statusCode === 400) {
+      return res.status(err.statusCode).json({
+        success: false,
+        message: err.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi Server'
+    });
+  }
+};
+
 module.exports = {
   addPost,
   getPost,
   getAllPosts,
-  getTopTrendingPosts
+  getTopTrendingPosts,
+  savePost,
+  getSavedPosts
 };
-

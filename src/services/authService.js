@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Profile = require('../models/Profile');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const redisClient = require('../config/redis');
@@ -185,6 +186,22 @@ const handleVerifyRegisterOtp = async (email, otp) => {
   // Xác thực email thành công
   user.isEmailVerified = true;
   await user.save();
+
+  // Tự động tạo một Profile rỗng cho user để hiển thị lên trang Cộng đồng
+  try {
+    const existingProfile = await Profile.findOne({ user: user._id });
+    if (!existingProfile) {
+      const newProfile = new Profile({
+        user: user._id,
+        status: 'Developer', // Giá trị mặc định
+        faculty: 'Chưa cập nhật', // Fix lỗi Validation
+        skills: []
+      });
+      await newProfile.save();
+    }
+  } catch (err) {
+    console.error('Lỗi khi tự động tạo profile:', err);
+  }
 
   // Xóa OTP khỏi Redis để tránh dùng lại
   await redisClient.del(`registerOTP:${email}`);

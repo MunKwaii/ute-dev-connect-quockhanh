@@ -235,6 +235,44 @@ const unfollowUser = async (req, res) => {
     }
 };
 
+/**
+ * Controller: Lấy danh sách người theo dõi của một user
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const getFollowers = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.user_id).populate('followers.user', ['name', 'avatar', 'studentId']);
+        if (!user) return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        return res.status(200).json(user.followers);
+    } catch (error) {
+        console.error('Lỗi ở getFollowers controller:', error.message);
+        if (error.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        }
+        return res.status(500).json({ msg: 'Lỗi máy chủ (Server Error)' });
+    }
+};
+
+/**
+ * Controller: Lấy danh sách đang theo dõi của một user
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const getFollowing = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.user_id).populate('following.user', ['name', 'avatar', 'studentId']);
+        if (!user) return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        return res.status(200).json(user.following);
+    } catch (error) {
+        console.error('Lỗi ở getFollowing controller:', error.message);
+        if (error.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        }
+        return res.status(500).json({ msg: 'Lỗi máy chủ (Server Error)' });
+    }
+};
+
 module.exports = {
     editProfile,
     getCurrentProfile,
@@ -242,6 +280,8 @@ module.exports = {
     getProfileById,
     getTopDevelopers,
     followUser,
-    unfollowUser
+    unfollowUser,
+    getFollowers,
+    getFollowing
 };
 

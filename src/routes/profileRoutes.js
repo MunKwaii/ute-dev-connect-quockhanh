@@ -49,6 +49,16 @@ router.put('/profile/follow/:user_id', verifyToken, profileController.followUser
 // @access  Private
 router.put('/profile/unfollow/:user_id', verifyToken, profileController.unfollowUser);
 
+// @route   GET /api/profile/followers/:user_id
+// @desc    Lấy danh sách người theo dõi
+// @access  Public
+router.get('/profile/followers/:user_id', profileController.getFollowers);
+
+// @route   GET /api/profile/following/:user_id
+// @desc    Lấy danh sách người đang theo dõi
+// @access  Public
+router.get('/profile/following/:user_id', profileController.getFollowing);
+
 
 // ==========================================
 // CÁC ROUTE PHÂN QUYỀN (Từ nhánh feature/login của bạn)

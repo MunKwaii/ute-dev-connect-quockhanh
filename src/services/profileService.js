@@ -38,7 +38,7 @@ const updateUserProfile = async (userId, profileFields) => {
  */
 const getProfileByUserId = async (userId) => {
     try {
-        const profile = await Profile.findOne({ user: userId }).populate('user', ['name', 'avatar']);
+        const profile = await Profile.findOne({ user: userId }).populate('user', ['name', 'avatar', 'followers', 'following']);
         return profile;
     } catch (error) {
         throw error;
@@ -51,7 +51,7 @@ const getProfileByUserId = async (userId) => {
  */
 const getAllProfiles = async () => {
     try {
-        const profiles = await Profile.find().populate('user', ['name', 'avatar']);
+        const profiles = await Profile.find().populate('user', ['name', 'avatar', 'followers', 'following']);
         return profiles;
     } catch (error) {
         throw error;
@@ -105,7 +105,9 @@ const getTopDevelopers = async () => {
                     user: {
                         _id: "$userDetails._id",
                         name: "$userDetails.name",
-                        avatar: "$userDetails.avatar"
+                        avatar: "$userDetails.avatar",
+                        followers: "$userDetails.followers",
+                        following: "$userDetails.following"
                     },
                     faculty: 1,
                     classCode: 1,

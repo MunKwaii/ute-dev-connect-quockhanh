@@ -39,6 +39,16 @@ router.get('/profile/top-developers', profileController.getTopDevelopers);
 // @access  Public
 router.get('/profile/user/:user_id', profileController.getProfileById);
 
+// @route   PUT /api/profile/follow/:user_id
+// @desc    Follow một người dùng
+// @access  Private
+router.put('/profile/follow/:user_id', verifyToken, profileController.followUser);
+
+// @route   PUT /api/profile/unfollow/:user_id
+// @desc    Unfollow một người dùng
+// @access  Private
+router.put('/profile/unfollow/:user_id', verifyToken, profileController.unfollowUser);
+
 
 // ==========================================
 // CÁC ROUTE PHÂN QUYỀN (Từ nhánh feature/login của bạn)

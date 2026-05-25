@@ -39,6 +39,26 @@ router.get('/profile/top-developers', profileController.getTopDevelopers);
 // @access  Public
 router.get('/profile/user/:user_id', profileController.getProfileById);
 
+// @route   PUT /api/profile/follow/:user_id
+// @desc    Follow một người dùng
+// @access  Private
+router.put('/profile/follow/:user_id', verifyToken, profileController.followUser);
+
+// @route   PUT /api/profile/unfollow/:user_id
+// @desc    Unfollow một người dùng
+// @access  Private
+router.put('/profile/unfollow/:user_id', verifyToken, profileController.unfollowUser);
+
+// @route   GET /api/profile/followers/:user_id
+// @desc    Lấy danh sách người theo dõi
+// @access  Public
+router.get('/profile/followers/:user_id', profileController.getFollowers);
+
+// @route   GET /api/profile/following/:user_id
+// @desc    Lấy danh sách người đang theo dõi
+// @access  Public
+router.get('/profile/following/:user_id', profileController.getFollowing);
+
 
 // ==========================================
 // CÁC ROUTE PHÂN QUYỀN (Từ nhánh feature/login của bạn)

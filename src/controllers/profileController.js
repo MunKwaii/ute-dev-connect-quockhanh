@@ -1,4 +1,5 @@
 const profileService = require('../services/profileService');
+const User = require('../models/User');
 
 /**
  * Controller: Cập nhật hoặc tạo mới hồ sơ người dùng (Edit Profile)
@@ -132,11 +133,155 @@ const getTopDevelopers = async (req, res) => {
     }
 };
 
+/**
+ * Controller: Follow người dùng
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const followUser = async (req, res) => {
+    try {
+        const userIdToFollow = req.params.user_id;
+        const loggedInUserId = req.user.id;
+
+        if (userIdToFollow === loggedInUserId) {
+            return res.status(400).json({ msg: 'Bạn không thể tự theo dõi chính mình' });
+        }
+
+        const userToFollow = await User.findById(userIdToFollow);
+        const loggedInUser = await User.findById(loggedInUserId);
+
+        if (!userToFollow || !loggedInUser) {
+            return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        }
+
+        // Kiểm tra xem đã follow chưa
+        if (userToFollow.followers.filter(follower => follower.user.toString() === loggedInUserId).length > 0) {
+            return res.status(400).json({ msg: 'Bạn đã theo dõi người dùng này rồi' });
+        }
+
+        // Thêm vào mảng bằng updateOne để tránh lỗi validation ở các field cũ (như studentId)
+        await User.updateOne(
+            { _id: userIdToFollow },
+            { $push: { followers: { $each: [{ user: loggedInUserId }], $position: 0 } } }
+        );
+
+        await User.updateOne(
+            { _id: loggedInUserId },
+            { $push: { following: { $each: [{ user: userIdToFollow }], $position: 0 } } }
+        );
+
+        // Trả về data mới
+        userToFollow.followers.unshift({ user: loggedInUserId });
+        loggedInUser.following.unshift({ user: userIdToFollow });
+
+        return res.status(200).json({ followers: userToFollow.followers, following: loggedInUser.following });
+    } catch (error) {
+        console.error('Lỗi ở followUser controller:', error.message);
+        if (error.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        }
+        return res.status(500).json({ msg: 'Lỗi máy chủ (Server Error)' });
+    }
+};
+
+/**
+ * Controller: Unfollow người dùng
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const unfollowUser = async (req, res) => {
+    try {
+        const userIdToUnfollow = req.params.user_id;
+        const loggedInUserId = req.user.id;
+
+        const userToUnfollow = await User.findById(userIdToUnfollow);
+        const loggedInUser = await User.findById(loggedInUserId);
+
+        if (!userToUnfollow || !loggedInUser) {
+            return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        }
+
+        // Kiểm tra xem đã follow chưa
+        if (userToUnfollow.followers.filter(follower => follower.user.toString() === loggedInUserId).length === 0) {
+            return res.status(400).json({ msg: 'Bạn chưa theo dõi người dùng này' });
+        }
+
+        // Xóa khỏi mảng bằng updateOne
+        await User.updateOne(
+            { _id: userIdToUnfollow },
+            { $pull: { followers: { user: loggedInUserId } } }
+        );
+
+        await User.updateOne(
+            { _id: loggedInUserId },
+            { $pull: { following: { user: userIdToUnfollow } } }
+        );
+
+        // Cập nhật mảng local để trả về
+        userToUnfollow.followers = userToUnfollow.followers.filter(
+            follower => follower.user.toString() !== loggedInUserId
+        );
+        loggedInUser.following = loggedInUser.following.filter(
+            following => following.user.toString() !== userIdToUnfollow
+        );
+
+        return res.status(200).json({ followers: userToUnfollow.followers, following: loggedInUser.following });
+    } catch (error) {
+        console.error('Lỗi ở unfollowUser controller:', error.message);
+        if (error.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        }
+        return res.status(500).json({ msg: 'Lỗi máy chủ (Server Error)' });
+    }
+};
+
+/**
+ * Controller: Lấy danh sách người theo dõi của một user
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const getFollowers = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.user_id).populate('followers.user', ['name', 'avatar', 'studentId']);
+        if (!user) return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        return res.status(200).json(user.followers);
+    } catch (error) {
+        console.error('Lỗi ở getFollowers controller:', error.message);
+        if (error.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        }
+        return res.status(500).json({ msg: 'Lỗi máy chủ (Server Error)' });
+    }
+};
+
+/**
+ * Controller: Lấy danh sách đang theo dõi của một user
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const getFollowing = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.user_id).populate('following.user', ['name', 'avatar', 'studentId']);
+        if (!user) return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        return res.status(200).json(user.following);
+    } catch (error) {
+        console.error('Lỗi ở getFollowing controller:', error.message);
+        if (error.kind === 'ObjectId') {
+            return res.status(404).json({ msg: 'Người dùng không tồn tại' });
+        }
+        return res.status(500).json({ msg: 'Lỗi máy chủ (Server Error)' });
+    }
+};
+
 module.exports = {
     editProfile,
     getCurrentProfile,
     getAllProfiles,
     getProfileById,
-    getTopDevelopers
+    getTopDevelopers,
+    followUser,
+    unfollowUser,
+    getFollowers,
+    getFollowing
 };
 

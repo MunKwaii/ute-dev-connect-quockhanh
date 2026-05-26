@@ -44,4 +44,23 @@ router.get('/saved', verifyToken, postController.getSavedPosts);
 // @access  Public
 router.get('/:id', postController.getPost);
 
+// @route   PUT /api/posts/like/:id
+// @desc    Like bài viết
+// @access  Private
+router.put('/like/:id', verifyToken, postController.likePost);
+
+// @route   POST /api/posts/comment/:id
+// @desc    Thêm bình luận vào bài viết
+// @access  Private
+router.post(
+  '/comment/:id',
+  [
+    verifyToken,
+    [
+      check('text', 'Nội dung bình luận không được để trống').not().isEmpty()
+    ]
+  ],
+  postController.addComment
+);
+
 module.exports = router;

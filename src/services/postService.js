@@ -4,15 +4,18 @@ const User = require('../models/User');
 const createPost = async (userId, text) => {
   try {
     const user = await User.findById(userId).select('-password');
+
     if (!user) {
-      throw new Error('Người dùng không tồn tại');
+      const error = new Error('Người dùng không tồn tại');
+      error.statusCode = 404;
+      throw error;
     }
 
     const newPost = new Post({
       text,
       name: user.name,
       avatar: user.avatar,
-      user: userId
+      user: userId,
     });
 
     const post = await newPost.save();
@@ -25,11 +28,13 @@ const createPost = async (userId, text) => {
 const getPostById = async (postId) => {
   try {
     const post = await Post.findById(postId);
+
     if (!post) {
       const error = new Error('Bài viết không tồn tại');
       error.statusCode = 404;
       throw error;
     }
+
     return post;
   } catch (error) {
     if (error.kind === 'ObjectId') {
@@ -37,6 +42,7 @@ const getPostById = async (postId) => {
       invalidIdError.statusCode = 400;
       throw invalidIdError;
     }
+
     throw error;
   }
 };
@@ -44,24 +50,19 @@ const getPostById = async (postId) => {
 const getAllPosts = async (page = 1, limit = 5) => {
   try {
     const skip = (page - 1) * limit;
-    
-    // Lấy danh sách bài viết theo phân trang (sắp xếp theo ngày mới nhất)
-    // Lưu ý: Bài báo cáo yêu cầu .sort({ date: 1 }) nhưng để hiển thị bài mới nhất thì thường dùng -1
+
     const posts = await Post.find()
       .sort({ date: -1 })
       .skip(skip)
       .limit(limit);
-      
-    // Tính tổng số bài viết
+
     const total = await Post.countDocuments();
-    
-    // Kiểm tra xem còn bài viết để tải không
     const hasMore = total > skip + posts.length;
 
     return {
       posts,
       hasMore,
-      total
+      total,
     };
   } catch (error) {
     throw error;
@@ -73,21 +74,22 @@ const getTopTrendingPosts = async () => {
     const posts = await Post.aggregate([
       {
         $addFields: {
-          likesCount: { $size: { $ifNull: ["$likes", []] } },
-          commentsCount: { $size: { $ifNull: ["$comments", []] } }
-        }
+          likesCount: { $size: { $ifNull: ['$likes', []] } },
+          commentsCount: { $size: { $ifNull: ['$comments', []] } },
+        },
       },
       {
         $sort: {
           likesCount: -1,
           commentsCount: -1,
-          date: -1
-        }
+          date: -1,
+        },
       },
       {
-        $limit: 10
-      }
+        $limit: 10,
+      },
     ]);
+
     return posts;
   } catch (error) {
     throw error;
@@ -112,12 +114,12 @@ const toggleSavePost = async (userId, postId) => {
   }
 
   const isSaved = user.savedPosts.some(
-    (savedPostId) => savedPostId.toString() === postId
+    (savedPostId) => savedPostId.toString() === postId.toString()
   );
 
   if (isSaved) {
     user.savedPosts = user.savedPosts.filter(
-      (savedPostId) => savedPostId.toString() !== postId
+      (savedPostId) => savedPostId.toString() !== postId.toString()
     );
   } else {
     user.savedPosts.unshift(postId);
@@ -128,14 +130,14 @@ const toggleSavePost = async (userId, postId) => {
   return {
     isSaved: !isSaved,
     savedPosts: user.savedPosts,
-    postId
+    postId,
   };
 };
 
 const getSavedPosts = async (userId) => {
   const user = await User.findById(userId).populate({
     path: 'savedPosts',
-    options: { sort: { date: -1 } }
+    options: { sort: { date: -1 } },
   });
 
   if (!user) {
@@ -147,42 +149,70 @@ const getSavedPosts = async (userId) => {
   return user.savedPosts;
 };
 
-const toggleLikePost = async (userId, postId) => {
+// Like / Unlike bài viết dạng toggle
+const toggleLikePost = async (postId, userId) => {
   try {
     const post = await Post.findById(postId);
+
     if (!post) {
       const error = new Error('Bài viết không tồn tại');
       error.statusCode = 404;
       throw error;
     }
 
-    const likeIndex = post.likes.findIndex((like) => like.user.toString() === userId);
-    let isLiked = false;
+    const likedIndex = post.likes.findIndex(
+      (like) => like.user.toString() === userId.toString()
+    );
 
-    if (likeIndex > -1) {
-      // Bỏ like
-      post.likes.splice(likeIndex, 1);
-    } else {
-      // Like
+    let liked = false;
+
+    if (likedIndex === -1) {
       post.likes.unshift({ user: userId });
-      isLiked = true;
+      liked = true;
+    } else {
+      post.likes.splice(likedIndex, 1);
+      liked = false;
     }
 
     await post.save();
-    return { likes: post.likes, isLiked, postOwnerId: post.user };
+
+    return {
+      liked,
+      isLiked: liked,
+      likesCount: post.likes.length,
+      likes: post.likes,
+      postOwnerId: post.user,
+    };
   } catch (error) {
     if (error.kind === 'ObjectId') {
       const invalidIdError = new Error('Định dạng ID bài viết không hợp lệ');
       invalidIdError.statusCode = 400;
       throw invalidIdError;
     }
+
     throw error;
   }
 };
 
-const addComment = async (userId, postId, text) => {
+// Thêm bình luận vào bài viết
+const addComment = async (postId, userId, text) => {
   try {
+    const normalizedText = text ? text.trim() : '';
+
+    if (!normalizedText) {
+      const error = new Error('Nội dung bình luận không được để trống');
+      error.statusCode = 400;
+      throw error;
+    }
+
     const user = await User.findById(userId).select('-password');
+
+    if (!user) {
+      const error = new Error('Người dùng không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
     const post = await Post.findById(postId);
 
     if (!post) {
@@ -192,22 +222,26 @@ const addComment = async (userId, postId, text) => {
     }
 
     const newComment = {
-      text,
+      user: userId,
+      text: normalizedText,
       name: user.name,
       avatar: user.avatar,
-      user: userId
     };
 
     post.comments.unshift(newComment);
     await post.save();
 
-    return { comments: post.comments, postOwnerId: post.user };
+    return {
+      comments: post.comments,
+      postOwnerId: post.user,
+    };
   } catch (error) {
     if (error.kind === 'ObjectId') {
       const invalidIdError = new Error('Định dạng ID bài viết không hợp lệ');
       invalidIdError.statusCode = 400;
       throw invalidIdError;
     }
+
     throw error;
   }
 };
@@ -220,6 +254,5 @@ module.exports = {
   toggleSavePost,
   getSavedPosts,
   toggleLikePost,
-  addComment
+  addComment,
 };
-

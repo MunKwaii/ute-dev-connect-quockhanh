@@ -18,8 +18,8 @@ router.post(
   [
     verifyToken,
     [
-      check('text', 'Nội dung không được để trống').not().isEmpty()
-    ]
+      check('text', 'Nội dung không được để trống').not().isEmpty(),
+    ],
   ],
   postController.addPost
 );
@@ -28,6 +28,8 @@ router.post(
 // @desc    Lấy top 10 bài viết nổi bật
 // @access  Public
 router.get('/top-trending', postController.getTopTrendingPosts);
+
+// Đặt các route cụ thể trước /:id để tránh bị hiểu nhầm là id bài viết
 
 // @route   PUT /api/posts/save/:id
 // @desc    Lưu hoặc bỏ lưu bài viết
@@ -39,13 +41,8 @@ router.put('/save/:id', verifyToken, postController.savePost);
 // @access  Private
 router.get('/saved', verifyToken, postController.getSavedPosts);
 
-// @route   GET /api/posts/:id
-// @desc    Lấy bài viết theo ID
-// @access  Public
-router.get('/:id', postController.getPost);
-
 // @route   PUT /api/posts/like/:id
-// @desc    Like bài viết
+// @desc    Like / Unlike bài viết
 // @access  Private
 router.put('/like/:id', verifyToken, postController.likePost);
 
@@ -57,10 +54,18 @@ router.post(
   [
     verifyToken,
     [
-      check('text', 'Nội dung bình luận không được để trống').not().isEmpty()
-    ]
+      check('text', 'Nội dung bình luận không được để trống')
+        .trim()
+        .not()
+        .isEmpty(),
+    ],
   ],
   postController.addComment
 );
+
+// @route   GET /api/posts/:id
+// @desc    Lấy bài viết theo ID
+// @access  Public
+router.get('/:id', postController.getPost);
 
 module.exports = router;

@@ -2,27 +2,43 @@ const { validationResult } = require('express-validator');
 const postService = require('../services/postService');
 const notificationService = require('../services/notificationService');
 
+const getUserId = (req) => {
+  return req.user?.id || req.user?._id || req.user?.userId;
+};
+
 const addPost = async (req, res) => {
   const errors = validationResult(req);
+
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       message: 'Lỗi dữ liệu đầu vào',
-      errors: errors.array()
+      errors: errors.array(),
     });
   }
 
   try {
-    const post = await postService.createPost(req.user.id, req.body.text);
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Không xác định được người dùng từ token',
+      });
+    }
+
+    const post = await postService.createPost(userId, req.body.text);
+
     res.status(201).json({
       success: true,
-      data: post
+      data: post,
     });
   } catch (err) {
     console.error(err.message);
+
     res.status(500).json({
       success: false,
-      message: 'Lỗi Server'
+      message: 'Lỗi Server',
     });
   }
 };
@@ -30,27 +46,24 @@ const addPost = async (req, res) => {
 const getPost = async (req, res) => {
   try {
     const post = await postService.getPostById(req.params.id);
+
     res.status(200).json({
       success: true,
-      data: post
+      data: post,
     });
   } catch (err) {
     console.error(err.message);
-    if (err.statusCode === 404) {
-      return res.status(404).json({
+
+    if (err.statusCode === 404 || err.statusCode === 400) {
+      return res.status(err.statusCode).json({
         success: false,
-        message: err.message
+        message: err.message,
       });
     }
-    if (err.statusCode === 400) {
-      return res.status(400).json({
-        success: false,
-        message: err.message
-      });
-    }
+
     res.status(500).json({
       success: false,
-      message: 'Lỗi Server'
+      message: 'Lỗi Server',
     });
   }
 };
@@ -62,50 +75,62 @@ const getAllPosts = async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 5;
 
     const result = await postService.getAllPosts(page, limit);
+
     res.status(200).json({
       success: true,
       data: result.posts,
       hasMore: result.hasMore,
       total: result.total,
       page,
-      limit
+      limit,
     });
   } catch (err) {
     console.error(err.message);
+
     res.status(500).json({
       success: false,
-      message: 'Lỗi Server'
+      message: 'Lỗi Server',
     });
   }
 };
 
-// @desc    Lấy top 10 bài viết nổi bật (nhiều likes/comments nhất)
+// @desc    Lấy top 10 bài viết nổi bật
 const getTopTrendingPosts = async (req, res) => {
   try {
     const posts = await postService.getTopTrendingPosts();
+
     res.status(200).json({
       success: true,
-      data: posts
+      data: posts,
     });
   } catch (err) {
     console.error(err.message);
+
     res.status(500).json({
       success: false,
-      message: 'Lỗi Server'
+      message: 'Lỗi Server',
     });
   }
 };
 
+// @desc    Lưu / Bỏ lưu bài viết
 const savePost = async (req, res) => {
   try {
-    const result = await postService.toggleSavePost(req.user.id, req.params.id);
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Không xác định được người dùng từ token',
+      });
+    }
+
+    const result = await postService.toggleSavePost(userId, req.params.id);
 
     res.status(200).json({
       success: true,
-      message: result.isSaved
-        ? 'Đã lưu bài viết'
-        : 'Đã bỏ lưu bài viết',
-      data: result
+      message: result.isSaved ? 'Đã lưu bài viết' : 'Đã bỏ lưu bài viết',
+      data: result,
     });
   } catch (err) {
     console.error(err.message);
@@ -113,24 +138,34 @@ const savePost = async (req, res) => {
     if (err.statusCode === 404 || err.statusCode === 400) {
       return res.status(err.statusCode).json({
         success: false,
-        message: err.message
+        message: err.message,
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Lỗi Server'
+      message: 'Lỗi Server',
     });
   }
 };
 
+// @desc    Lấy danh sách bài viết đã lưu
 const getSavedPosts = async (req, res) => {
   try {
-    const posts = await postService.getSavedPosts(req.user.id);
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Không xác định được người dùng từ token',
+      });
+    }
+
+    const posts = await postService.getSavedPosts(userId);
 
     res.status(200).json({
       success: true,
-      data: posts
+      data: posts,
     });
   } catch (err) {
     console.error(err.message);
@@ -138,66 +173,130 @@ const getSavedPosts = async (req, res) => {
     if (err.statusCode === 404 || err.statusCode === 400) {
       return res.status(err.statusCode).json({
         success: false,
-        message: err.message
+        message: err.message,
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Lỗi Server'
+      message: 'Lỗi Server',
     });
   }
 };
 
+// @desc    Like / Unlike bài viết
 const likePost = async (req, res) => {
   try {
-    const result = await postService.toggleLikePost(req.user.id, req.params.id);
+    const userId = getUserId(req);
 
-    // Chỉ tạo thông báo nếu đây là hành động Like (không phải Unlike)
-    if (result.isLiked) {
-      await notificationService.createNotification(result.postOwnerId, req.user.id, 'like', req.params.id);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Không xác định được người dùng từ token',
+      });
     }
 
-    res.status(200).json(result.likes); // Trả về dạng mảng giống với code mẫu
+    const result = await postService.toggleLikePost(req.params.id, userId);
+
+    // Chỉ tạo thông báo khi Like, không tạo khi Unlike
+    if (
+      result.liked &&
+      result.postOwnerId &&
+      result.postOwnerId.toString() !== userId.toString()
+    ) {
+      await notificationService.createNotification(
+        result.postOwnerId,
+        userId,
+        'like',
+        req.params.id
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: result.liked ? 'Đã thích bài viết' : 'Đã hủy thích bài viết',
+      liked: result.liked,
+      likesCount: result.likesCount,
+      likes: result.likes,
+      data: result.likes,
+    });
   } catch (err) {
     console.error(err.message);
+
     if (err.statusCode === 404 || err.statusCode === 400) {
       return res.status(err.statusCode).json({
         success: false,
-        message: err.message
+        message: err.message,
       });
     }
+
     res.status(500).json({
       success: false,
-      message: 'Lỗi Server'
+      message: 'Lỗi Server',
     });
   }
 };
 
+// @desc    Thêm bình luận
 const addComment = async (req, res) => {
   const errors = validationResult(req);
+
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    return res.status(400).json({
+      success: false,
+      message: 'Lỗi dữ liệu đầu vào',
+      errors: errors.array(),
+    });
   }
 
   try {
-    const result = await postService.addComment(req.user.id, req.params.id, req.body.text);
+    const userId = getUserId(req);
 
-    // Tạo thông báo khi có comment mới
-    await notificationService.createNotification(result.postOwnerId, req.user.id, 'comment', req.params.id);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Không xác định được người dùng từ token',
+      });
+    }
 
-    res.status(201).json(result.comments); // Trả về dạng mảng giống với code mẫu
+    const result = await postService.addComment(
+      req.params.id,
+      userId,
+      req.body.text
+    );
+
+    // Tạo thông báo khi comment mới
+    if (
+      result.postOwnerId &&
+      result.postOwnerId.toString() !== userId.toString()
+    ) {
+      await notificationService.createNotification(
+        result.postOwnerId,
+        userId,
+        'comment',
+        req.params.id
+      );
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Thêm bình luận thành công',
+      comments: result.comments,
+      data: result.comments,
+    });
   } catch (err) {
     console.error(err.message);
+
     if (err.statusCode === 404 || err.statusCode === 400) {
       return res.status(err.statusCode).json({
         success: false,
-        message: err.message
+        message: err.message,
       });
     }
+
     res.status(500).json({
       success: false,
-      message: 'Lỗi Server'
+      message: 'Lỗi Server',
     });
   }
 };
@@ -210,5 +309,5 @@ module.exports = {
   savePost,
   getSavedPosts,
   likePost,
-  addComment
+  addComment,
 };

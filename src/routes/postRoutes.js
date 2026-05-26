@@ -2,10 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { check } = require('express-validator');
 
-// Import middlewares
 const { verifyToken } = require('../middlewares/authMiddleware');
-
-// Import controller
 const postController = require('../controllers/postController');
 
 // @route   GET /api/posts
@@ -21,13 +18,19 @@ router.post(
   [
     verifyToken,
     [
-      check('text', 'Nội dung không được để trống').not().isEmpty()
-    ]
+      check('text', 'Nội dung không được để trống').not().isEmpty(),
+    ],
   ],
   postController.addPost
 );
 
-// Tài: đặt các route cụ thể trước /:id
+// @route   GET /api/posts/top-trending
+// @desc    Lấy top 10 bài viết nổi bật
+// @access  Public
+router.get('/top-trending', postController.getTopTrendingPosts);
+
+// Đặt các route cụ thể trước /:id để tránh bị hiểu nhầm là id bài viết
+
 // @route   PUT /api/posts/like/:id
 // @desc    Like / Unlike bài viết
 // @access  Private

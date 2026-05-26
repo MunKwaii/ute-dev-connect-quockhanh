@@ -47,16 +47,56 @@ const getPostById = async (postId) => {
   }
 };
 
-const getAllPosts = async () => {
+const getAllPosts = async (page = 1, limit = 5) => {
   try {
-    const posts = await Post.find().sort({ date: -1 });
+    const skip = (page - 1) * limit;
+
+    const posts = await Post.find()
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Post.countDocuments();
+    const hasMore = total > skip + posts.length;
+
+    return {
+      posts,
+      hasMore,
+      total,
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
+const getTopTrendingPosts = async () => {
+  try {
+    const posts = await Post.aggregate([
+      {
+        $addFields: {
+          likesCount: { $size: { $ifNull: ['$likes', []] } },
+          commentsCount: { $size: { $ifNull: ['$comments', []] } },
+        },
+      },
+      {
+        $sort: {
+          likesCount: -1,
+          commentsCount: -1,
+          date: -1,
+        },
+      },
+      {
+        $limit: 10,
+      },
+    ]);
+
     return posts;
   } catch (error) {
     throw error;
   }
 };
 
-// Tài: Like / Unlike bài viết dạng toggle
+// Like / Unlike bài viết dạng toggle
 const toggleLikePost = async (postId, userId) => {
   try {
     const post = await Post.findById(postId);
@@ -99,7 +139,7 @@ const toggleLikePost = async (postId, userId) => {
   }
 };
 
-// Tài: Thêm bình luận vào bài viết
+// Thêm bình luận vào bài viết
 const addComment = async (postId, userId, text) => {
   try {
     const normalizedText = text ? text.trim() : '';
@@ -134,7 +174,6 @@ const addComment = async (postId, userId, text) => {
     };
 
     post.comments.unshift(newComment);
-
     await post.save();
 
     return post.comments;
@@ -153,6 +192,7 @@ module.exports = {
   createPost,
   getPostById,
   getAllPosts,
+  getTopTrendingPosts,
   toggleLikePost,
   addComment,
 };

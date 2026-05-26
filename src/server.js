@@ -19,6 +19,7 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api', require('./routes/profileRoutes'));
 app.use('/api/posts', require('./routes/postRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 const http = require('http');
 const { Server } = require('socket.io');
@@ -42,6 +43,11 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.id} joined room: ${conversationId}`);
   });
 
+  socket.on('setup', (userId) => {
+    socket.join(userId);
+    console.log(`User ${socket.id} setup global room: ${userId}`);
+  });
+
   socket.on('send_message', async (data) => {
     try {
       const { conversationId, senderId, text } = data;
@@ -58,6 +64,17 @@ io.on('connection', (socket) => {
 
       // Gửi tin nhắn cho tất cả user trong room
       io.to(conversationId).emit('receive_message', newMessage);
+
+      // Gửi thông báo có tin nhắn cho từng participant trong conversation
+      // (để người kia nhận được cuộc trò chuyện mới ngay lập tức)
+      const conversation = await Conversation.findById(conversationId);
+      if (conversation) {
+        conversation.participants.forEach(participantId => {
+          if (participantId.toString() !== senderId.toString()) {
+            io.to(participantId.toString()).emit('receive_message', newMessage);
+          }
+        });
+      }
     } catch (err) {
       console.error('Lỗi khi gửi tin nhắn:', err);
     }

@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator');
 const postService = require('../services/postService');
+const notificationService = require('../services/notificationService');
 
 const addPost = async (req, res) => {
   const errors = validationResult(req);
@@ -148,11 +149,66 @@ const getSavedPosts = async (req, res) => {
   }
 };
 
+const likePost = async (req, res) => {
+  try {
+    const result = await postService.toggleLikePost(req.user.id, req.params.id);
+
+    // Chỉ tạo thông báo nếu đây là hành động Like (không phải Unlike)
+    if (result.isLiked) {
+      await notificationService.createNotification(result.postOwnerId, req.user.id, 'like', req.params.id);
+    }
+
+    res.status(200).json(result.likes); // Trả về dạng mảng giống với code mẫu
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode === 404 || err.statusCode === 400) {
+      return res.status(err.statusCode).json({
+        success: false,
+        message: err.message
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi Server'
+    });
+  }
+};
+
+const addComment = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const result = await postService.addComment(req.user.id, req.params.id, req.body.text);
+
+    // Tạo thông báo khi có comment mới
+    await notificationService.createNotification(result.postOwnerId, req.user.id, 'comment', req.params.id);
+
+    res.status(201).json(result.comments); // Trả về dạng mảng giống với code mẫu
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode === 404 || err.statusCode === 400) {
+      return res.status(err.statusCode).json({
+        success: false,
+        message: err.message
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi Server'
+    });
+  }
+};
+
 module.exports = {
   addPost,
   getPost,
   getAllPosts,
   getTopTrendingPosts,
   savePost,
-  getSavedPosts
+  getSavedPosts,
+  likePost,
+  addComment
 };

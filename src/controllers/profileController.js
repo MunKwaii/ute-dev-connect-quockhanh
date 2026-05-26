@@ -1,5 +1,6 @@
 const profileService = require('../services/profileService');
 const User = require('../models/User');
+const notificationService = require('../services/notificationService');
 
 /**
  * Controller: Cập nhật hoặc tạo mới hồ sơ người dùng (Edit Profile)
@@ -173,6 +174,9 @@ const followUser = async (req, res) => {
         // Trả về data mới
         userToFollow.followers.unshift({ user: loggedInUserId });
         loggedInUser.following.unshift({ user: userIdToFollow });
+
+        // Tạo thông báo khi có người theo dõi
+        await notificationService.createNotification(userIdToFollow, loggedInUserId, 'follow');
 
         return res.status(200).json({ followers: userToFollow.followers, following: loggedInUser.following });
     } catch (error) {

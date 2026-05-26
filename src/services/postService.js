@@ -147,12 +147,79 @@ const getSavedPosts = async (userId) => {
   return user.savedPosts;
 };
 
+const toggleLikePost = async (userId, postId) => {
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      const error = new Error('Bài viết không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const likeIndex = post.likes.findIndex((like) => like.user.toString() === userId);
+    let isLiked = false;
+
+    if (likeIndex > -1) {
+      // Bỏ like
+      post.likes.splice(likeIndex, 1);
+    } else {
+      // Like
+      post.likes.unshift({ user: userId });
+      isLiked = true;
+    }
+
+    await post.save();
+    return { likes: post.likes, isLiked, postOwnerId: post.user };
+  } catch (error) {
+    if (error.kind === 'ObjectId') {
+      const invalidIdError = new Error('Định dạng ID bài viết không hợp lệ');
+      invalidIdError.statusCode = 400;
+      throw invalidIdError;
+    }
+    throw error;
+  }
+};
+
+const addComment = async (userId, postId, text) => {
+  try {
+    const user = await User.findById(userId).select('-password');
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      const error = new Error('Bài viết không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const newComment = {
+      text,
+      name: user.name,
+      avatar: user.avatar,
+      user: userId
+    };
+
+    post.comments.unshift(newComment);
+    await post.save();
+
+    return { comments: post.comments, postOwnerId: post.user };
+  } catch (error) {
+    if (error.kind === 'ObjectId') {
+      const invalidIdError = new Error('Định dạng ID bài viết không hợp lệ');
+      invalidIdError.statusCode = 400;
+      throw invalidIdError;
+    }
+    throw error;
+  }
+};
+
 module.exports = {
   createPost,
   getPostById,
   getAllPosts,
   getTopTrendingPosts,
   toggleSavePost,
-  getSavedPosts
+  getSavedPosts,
+  toggleLikePost,
+  addComment
 };
 

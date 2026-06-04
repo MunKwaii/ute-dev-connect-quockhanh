@@ -43,6 +43,12 @@ exports.getMessages = async (req, res) => {
       return res.status(403).json({ message: 'Bạn không có quyền truy cập hoặc phòng chat không tồn tại' });
     }
 
+    // Tự động đánh dấu đã đọc các tin nhắn nhận được
+    await Message.updateMany(
+      { conversationId, sender: { $ne: objectId }, isRead: false },
+      { $set: { isRead: true } }
+    );
+
     const messages = await Message.find({ conversationId })
       .populate('sender', 'name avatar')
       .sort({ createdAt: 1 }); // Xếp từ cũ đến mới để dễ hiển thị trên UI
@@ -82,6 +88,34 @@ exports.createOrGetConversation = async (req, res) => {
     res.status(200).json(conversation);
   } catch (error) {
     console.error('Lỗi khi tạo/lấy phòng chat:', error);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+};
+
+// Tải lên tệp tin hoặc hình ảnh đính kèm
+exports.uploadFile = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Không có tệp nào được tải lên' });
+    }
+
+    // Trả về fileUrl tĩnh
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    
+    // Nhận diện fileType
+    let fileType = 'file';
+    if (req.file.mimetype.startsWith('image/')) {
+      fileType = 'image';
+    }
+
+    res.status(200).json({
+      success: true,
+      fileUrl,
+      fileName: req.file.originalname,
+      fileType
+    });
+  } catch (error) {
+    console.error('Lỗi khi tải tệp tin lên:', error);
     res.status(500).json({ message: 'Lỗi server' });
   }
 };

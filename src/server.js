@@ -23,8 +23,17 @@ app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 const http = require('http');
 const { Server } = require('socket.io');
+const { ExpressPeerServer } = require('peer');
 
 const server = http.createServer(app);
+
+// Cấu hình PeerJS Server chạy trực tiếp trên cổng backend 5000
+const peerServer = ExpressPeerServer(server, {
+  debug: true,
+  path: '/'
+});
+app.use('/peer', peerServer);
+
 const io = new Server(server, {
   cors: {
     origin: '*', // Tạm thời allow all origin để test frontend dễ dàng
@@ -78,6 +87,30 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Lỗi khi gửi tin nhắn:', err);
     }
+  });
+
+  // --- HỖ TRỢ CUỘC GỌI VIDEO & THOẠI (WebRTC via PeerJS) ---
+  socket.on('call-user', (data) => {
+    console.log(`[Call] Cuộc gọi từ ${data.callerId} tới ${data.recipientId} (${data.callType})`);
+    io.to(data.recipientId).emit('incoming-call', {
+      callerId: data.callerId,
+      callerName: data.callerName,
+      callerAvatar: data.callerAvatar,
+      callType: data.callType
+    });
+  });
+
+  socket.on('answer-call', (data) => {
+    console.log(`[Call] Phản hồi cuộc gọi từ ${data.recipientId} tới ${data.callerId}: ${data.status}`);
+    io.to(data.callerId).emit('call-response', {
+      recipientId: data.recipientId,
+      status: data.status
+    });
+  });
+
+  socket.on('end-call', (data) => {
+    console.log(`[Call] Gác máy bởi socket ${socket.id}, thông báo cho ${data.targetId}`);
+    io.to(data.targetId).emit('call-ended');
   });
 
   socket.on('disconnect', () => {

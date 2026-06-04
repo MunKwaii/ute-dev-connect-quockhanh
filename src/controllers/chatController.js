@@ -43,6 +43,12 @@ exports.getMessages = async (req, res) => {
       return res.status(403).json({ message: 'Bạn không có quyền truy cập hoặc phòng chat không tồn tại' });
     }
 
+    // Tự động đánh dấu đã đọc các tin nhắn nhận được
+    await Message.updateMany(
+      { conversationId, sender: { $ne: objectId }, isRead: false },
+      { $set: { isRead: true } }
+    );
+
     const messages = await Message.find({ conversationId })
       .populate('sender', 'name avatar')
       .sort({ createdAt: 1 }); // Xếp từ cũ đến mới để dễ hiển thị trên UI

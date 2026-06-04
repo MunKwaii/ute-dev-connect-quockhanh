@@ -47,6 +47,8 @@ const io = new Server(server, {
 const Message = require('./models/Message');
 const Conversation = require('./models/Conversation');
 
+const onlineUsers = {}; // Map userId -> Array of socket.id
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -56,8 +58,22 @@ io.on('connection', (socket) => {
   });
 
   socket.on('setup', (userId) => {
+    socket.userId = userId;
     socket.join(userId);
     console.log(`User ${socket.id} setup global room: ${userId}`);
+
+    if (!onlineUsers[userId]) {
+      onlineUsers[userId] = [];
+    }
+    if (!onlineUsers[userId].includes(socket.id)) {
+      onlineUsers[userId].push(socket.id);
+    }
+
+    // Send current online users list to this user
+    socket.emit('get-online-users', Object.keys(onlineUsers));
+
+    // Broadcast to all others that this user is online
+    socket.broadcast.emit('user-online', userId);
   });
 
   socket.on('send_message', async (data) => {
@@ -100,6 +116,28 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- TYPING & READ RECEIPTS ---
+  socket.on('typing', ({ conversationId, userId }) => {
+    socket.to(conversationId).emit('typing', { conversationId, userId });
+  });
+
+  socket.on('stop-typing', ({ conversationId, userId }) => {
+    socket.to(conversationId).emit('stop-typing', { conversationId, userId });
+  });
+
+  socket.on('mark-as-read', async ({ conversationId, userId }) => {
+    try {
+      await Message.updateMany(
+        { conversationId, sender: { $ne: userId }, isRead: false },
+        { $set: { isRead: true } }
+      );
+      // Gửi sự kiện cho tất cả mọi người trong phòng chat biết là tin nhắn đã được đọc
+      io.to(conversationId).emit('messages-read', { conversationId, userId });
+    } catch (err) {
+      console.error('Error marking messages as read:', err);
+    }
+  });
+
   // --- HỖ TRỢ CUỘC GỌI VIDEO & THOẠI (WebRTC via PeerJS) ---
   socket.on('call-user', (data) => {
     console.log(`[Call] Cuộc gọi từ ${data.callerId} tới ${data.recipientId} (${data.callType})`);
@@ -126,6 +164,17 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    if (socket.userId) {
+      const userId = socket.userId;
+      if (onlineUsers[userId]) {
+        onlineUsers[userId] = onlineUsers[userId].filter(id => id !== socket.id);
+        if (onlineUsers[userId].length === 0) {
+          delete onlineUsers[userId];
+          // Broadcast to all others that this user is offline
+          socket.broadcast.emit('user-offline', userId);
+        }
+      }
+    }
   });
 });
 

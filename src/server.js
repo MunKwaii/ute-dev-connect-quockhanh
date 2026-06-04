@@ -10,6 +10,9 @@ connectDB();
 
 app.use(express.json());
 
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 app.get('/', (req, res) => {
   res.send('API Mạng xã hội đang chạy trên Database Online!');
 });
@@ -59,10 +62,18 @@ io.on('connection', (socket) => {
 
   socket.on('send_message', async (data) => {
     try {
-      const { conversationId, senderId, text } = data;
+      const { conversationId, senderId, text, fileUrl, fileName, fileType, codeSnippet } = data;
       
       // Lưu tin nhắn vào DB
-      const newMessage = new Message({ conversationId, sender: senderId, text });
+      const newMessage = new Message({ 
+        conversationId, 
+        sender: senderId, 
+        text, 
+        fileUrl, 
+        fileName, 
+        fileType, 
+        codeSnippet 
+      });
       await newMessage.save();
 
       // Cập nhật lastMessage cho Conversation

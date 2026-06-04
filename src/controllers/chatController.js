@@ -85,3 +85,31 @@ exports.createOrGetConversation = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server' });
   }
 };
+
+// Tải lên tệp tin hoặc hình ảnh đính kèm
+exports.uploadFile = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Không có tệp nào được tải lên' });
+    }
+
+    // Trả về fileUrl tĩnh
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    
+    // Nhận diện fileType
+    let fileType = 'file';
+    if (req.file.mimetype.startsWith('image/')) {
+      fileType = 'image';
+    }
+
+    res.status(200).json({
+      success: true,
+      fileUrl,
+      fileName: req.file.originalname,
+      fileType
+    });
+  } catch (error) {
+    console.error('Lỗi khi tải tệp tin lên:', error);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+};

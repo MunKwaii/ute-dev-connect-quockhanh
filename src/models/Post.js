@@ -16,6 +16,11 @@ const PostSchema = new Schema({
     type: [String],
     default: []
   },
+  group: {
+    type: Schema.Types.ObjectId,
+    ref: 'group',
+    default: null
+  },
   name: {
     type: String
   },
@@ -55,5 +60,8 @@ const PostSchema = new Schema({
     default: Date.now
   }
 });
+
+// Text index cho Full-text search (chỉ được có 1 text index per collection)
+PostSchema.index({ text: 'text', tags: 'text' });
 
 module.exports = mongoose.model('post', PostSchema);

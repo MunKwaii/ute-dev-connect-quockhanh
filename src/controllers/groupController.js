@@ -1,0 +1,192 @@
+const { validationResult } = require('express-validator');
+const groupService = require('../services/groupService');
+const postService = require('../services/postService');
+
+// Helper lấy userId từ token (nhất quán với codebase hiện tại)
+const getUserId = (req) => {
+  return req.user?.id || req.user?._id || req.user?.userId;
+};
+
+// @desc    Tạo nhóm mới
+// @access  Private
+const createGroup = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: 'Lỗi dữ liệu đầu vào', errors: errors.array() });
+  }
+
+  try {
+    const userId = getUserId(req);
+    const { name, description, tags } = req.body;
+
+    const group = await groupService.createGroup(userId, { name, description, tags });
+
+    res.status(201).json({ success: true, message: 'Tạo nhóm thành công', data: group });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Lấy tất cả nhóm (có phân trang + tìm kiếm)
+// @access  Public
+const getAllGroups = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const keyword = req.query.q || '';
+
+    const result = await groupService.getAllGroups(page, limit, keyword);
+
+    res.status(200).json({
+      success: true,
+      data: result.groups,
+      total: result.total,
+      hasMore: result.hasMore,
+      page,
+      limit,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Lấy chi tiết nhóm theo ID
+// @access  Public
+const getGroupById = async (req, res) => {
+  try {
+    // userId có thể không có nếu chưa đăng nhập (public route)
+    const userId = req.user ? getUserId(req) : null;
+    const group = await groupService.getGroupById(req.params.id, userId);
+
+    res.status(200).json({ success: true, data: group });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Tham gia nhóm
+// @access  Private
+const joinGroup = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const result = await groupService.joinGroup(req.params.id, userId);
+
+    res.status(200).json({ success: true, message: result.message, membersCount: result.membersCount });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Rời nhóm
+// @access  Private
+const leaveGroup = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const result = await groupService.leaveGroup(req.params.id, userId);
+
+    res.status(200).json({ success: true, message: result.message, membersCount: result.membersCount });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Xóa nhóm (soft delete, chỉ admin nhóm)
+// @access  Private
+const deleteGroup = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const result = await groupService.deleteGroup(req.params.id, userId);
+
+    res.status(200).json({ success: true, message: result.message });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Lấy newsfeed của nhóm (chỉ thành viên)
+// @access  Private (middleware requireGroupMember sẽ xử lý trước)
+const getGroupFeed = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    const result = await groupService.getGroupFeed(req.params.id, page, limit);
+
+    res.status(200).json({
+      success: true,
+      data: result.posts,
+      total: result.total,
+      hasMore: result.hasMore,
+      page,
+      limit,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Đăng bài trong nhóm (chỉ thành viên)
+// @access  Private (middleware requireGroupMember sẽ xử lý trước)
+const createGroupPost = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: 'Lỗi dữ liệu đầu vào', errors: errors.array() });
+  }
+
+  try {
+    const userId = getUserId(req);
+    const groupId = req.params.id;
+
+    const post = await postService.createPost(userId, req.body.text, groupId);
+
+    res.status(201).json({ success: true, message: 'Đăng bài trong nhóm thành công', data: post });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Bình luận bài trong nhóm (chỉ thành viên)
+// @access  Private (middleware requireGroupMember sẽ xử lý trước)
+const addGroupComment = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: 'Lỗi dữ liệu đầu vào', errors: errors.array() });
+  }
+
+  try {
+    const userId = getUserId(req);
+    const result = await postService.addComment(req.params.postId, userId, req.body.text);
+
+    res.status(201).json({ success: true, message: 'Bình luận thành công', data: result.comments });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+module.exports = {
+  createGroup,
+  getAllGroups,
+  getGroupById,
+  joinGroup,
+  leaveGroup,
+  deleteGroup,
+  getGroupFeed,
+  createGroupPost,
+  addGroupComment,
+};

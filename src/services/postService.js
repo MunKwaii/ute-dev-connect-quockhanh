@@ -1,7 +1,7 @@
 const Post = require('../models/Post');
 const User = require('../models/User');
 
-const createPost = async (userId, text) => {
+const createPost = async (userId, text, groupId = null) => {
   try {
     const user = await User.findById(userId).select('-password');
 
@@ -16,6 +16,7 @@ const createPost = async (userId, text) => {
       name: user.name,
       avatar: user.avatar,
       user: userId,
+      group: groupId || null,
     });
 
     const post = await newPost.save();
@@ -51,12 +52,15 @@ const getAllPosts = async (page = 1, limit = 5) => {
   try {
     const skip = (page - 1) * limit;
 
-    const posts = await Post.find()
+    // Chỉ lấy bài viết public (không thuộc nhóm nào)
+    const filter = { group: null };
+
+    const posts = await Post.find(filter)
       .sort({ date: -1 })
       .skip(skip)
       .limit(limit);
 
-    const total = await Post.countDocuments();
+    const total = await Post.countDocuments(filter);
     const hasMore = total > skip + posts.length;
 
     return {

@@ -23,6 +23,8 @@ app.use('/api', require('./routes/profileRoutes'));
 app.use('/api/posts', require('./routes/postRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/groups', require('./routes/groupRoutes'));
+app.use('/api/search', require('./routes/searchRoutes'));
 
 const http = require('http');
 const { Server } = require('socket.io');

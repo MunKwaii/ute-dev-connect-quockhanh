@@ -27,7 +27,7 @@ const addPost = async (req, res) => {
       });
     }
 
-    const post = await postService.createPost(userId, req.body.text);
+    const post = await postService.createPost(userId, req.body.text, req.body.isQuestion);
 
     res.status(201).json({
       success: true,
@@ -301,6 +301,128 @@ const addComment = async (req, res) => {
   }
 };
 
+// @desc    Cập nhật bài viết
+const updatePost = async (req, res) => {
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Lỗi dữ liệu đầu vào',
+      errors: errors.array(),
+    });
+  }
+
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Không xác định được người dùng từ token' });
+    }
+
+    const post = await postService.updatePost(req.params.id, userId, req.body.text, req.body.isQuestion);
+
+    res.status(200).json({
+      success: true,
+      data: post,
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode === 404 || err.statusCode === 400 || err.statusCode === 401) {
+      return res.status(err.statusCode).json({ success: false, message: err.message });
+    }
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Xóa bài viết
+const deletePost = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Không xác định được người dùng từ token' });
+    }
+
+    const result = await postService.deletePost(req.params.id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode === 404 || err.statusCode === 400 || err.statusCode === 401) {
+      return res.status(err.statusCode).json({ success: false, message: err.message });
+    }
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Sửa bình luận
+const updateComment = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: 'Lỗi dữ liệu đầu vào', errors: errors.array() });
+  }
+
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const comments = await postService.updateComment(req.params.id, req.params.comment_id, userId, req.body.text);
+
+    res.status(200).json({
+      success: true,
+      message: 'Sửa bình luận thành công',
+      data: comments,
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Xóa bình luận
+const deleteComment = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const comments = await postService.deleteComment(req.params.id, req.params.comment_id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Xóa bình luận thành công',
+      data: comments,
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Chấp nhận câu trả lời
+const acceptAnswer = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const data = await postService.acceptAnswer(req.params.id, req.params.comment_id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Cập nhật trạng thái câu trả lời thành công',
+      data: data.comments,
+      post: data.post
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
 module.exports = {
   addPost,
   getPost,
@@ -310,4 +432,9 @@ module.exports = {
   getSavedPosts,
   likePost,
   addComment,
+  updatePost,
+  deletePost,
+  updateComment,
+  deleteComment,
+  acceptAnswer,
 };

@@ -63,6 +63,52 @@ router.post(
   postController.addComment
 );
 
+// @route   PUT /api/posts/accept/:id/:comment_id
+// @desc    Chấp nhận câu trả lời
+// @access  Private
+router.put('/accept/:id/:comment_id', verifyToken, postController.acceptAnswer);
+
+// @route   PUT /api/posts/comment/:id/:comment_id
+// @desc    Sửa bình luận
+// @access  Private
+router.put(
+  '/comment/:id/:comment_id',
+  [
+    verifyToken,
+    [
+      check('text', 'Nội dung bình luận không được để trống')
+        .trim()
+        .not()
+        .isEmpty(),
+    ],
+  ],
+  postController.updateComment
+);
+
+// @route   DELETE /api/posts/comment/:id/:comment_id
+// @desc    Xóa bình luận
+// @access  Private
+router.delete('/comment/:id/:comment_id', verifyToken, postController.deleteComment);
+
+// @route   PUT /api/posts/:id
+// @desc    Sửa bài viết
+// @access  Private
+router.put(
+  '/:id',
+  [
+    verifyToken,
+    [
+      check('text', 'Nội dung không được để trống').not().isEmpty(),
+    ],
+  ],
+  postController.updatePost
+);
+
+// @route   DELETE /api/posts/:id
+// @desc    Xóa bài viết
+// @access  Private
+router.delete('/:id', verifyToken, postController.deletePost);
+
 // @route   GET /api/posts/:id
 // @desc    Lấy bài viết theo ID
 // @access  Public

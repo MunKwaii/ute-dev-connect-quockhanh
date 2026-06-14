@@ -52,6 +52,10 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
+  reputation: {
+    type: Number,
+    default: 0
+  },
   role: {
     type: String,
     enum: ['user', 'admin'],

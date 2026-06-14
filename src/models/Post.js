@@ -27,6 +27,14 @@ const PostSchema = new Schema({
   avatar: {
     type: String
   },
+  isQuestion: {
+    type: Boolean,
+    default: false
+  },
+  acceptedAnswer: {
+    type: Schema.Types.ObjectId,
+    default: null
+  },
   likes: [
     {
       user: {
@@ -52,6 +60,10 @@ const PostSchema = new Schema({
       date: {
         type: Date,
         default: Date.now
+      },
+      isAccepted: {
+        type: Boolean,
+        default: false
       }
     }
   ],

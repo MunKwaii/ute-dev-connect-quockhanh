@@ -38,7 +38,7 @@ const updateUserProfile = async (userId, profileFields) => {
  */
 const getProfileByUserId = async (userId) => {
     try {
-        const profile = await Profile.findOne({ user: userId }).populate('user', ['name', 'avatar', 'followers', 'following']);
+        const profile = await Profile.findOne({ user: userId }).populate('user', ['name', 'avatar', 'followers', 'following', 'reputation']);
         return profile;
     } catch (error) {
         throw error;
@@ -51,7 +51,7 @@ const getProfileByUserId = async (userId) => {
  */
 const getAllProfiles = async () => {
     try {
-        const profiles = await Profile.find().populate('user', ['name', 'avatar', 'followers', 'following']);
+        const profiles = await Profile.find().populate('user', ['name', 'avatar', 'followers', 'following', 'reputation']);
         return profiles;
     } catch (error) {
         throw error;

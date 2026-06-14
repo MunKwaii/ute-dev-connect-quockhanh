@@ -1,7 +1,7 @@
 const Post = require('../models/Post');
 const User = require('../models/User');
 
-const createPost = async (userId, text, groupId = null) => {
+const createPost = async (userId, text, isQuestion = false, groupId = null) => {
   try {
     const user = await User.findById(userId).select('-password');
 
@@ -13,6 +13,7 @@ const createPost = async (userId, text, groupId = null) => {
 
     const newPost = new Post({
       text,
+      isQuestion,
       name: user.name,
       avatar: user.avatar,
       user: userId,
@@ -169,16 +170,26 @@ const toggleLikePost = async (postId, userId) => {
     );
 
     let liked = false;
+    let reputationChange = 0;
 
     if (likedIndex === -1) {
       post.likes.unshift({ user: userId });
       liked = true;
+      reputationChange = 2;
     } else {
       post.likes.splice(likedIndex, 1);
       liked = false;
+      reputationChange = -2;
     }
 
     await post.save();
+
+    // Cập nhật reputation cho tác giả bài viết nếu không tự like
+    if (post.user && post.user.toString() !== userId.toString()) {
+      await User.findByIdAndUpdate(post.user, {
+        $inc: { reputation: reputationChange }
+      });
+    }
 
     return {
       liked,
@@ -250,6 +261,219 @@ const addComment = async (postId, userId, text) => {
   }
 };
 
+// Cập nhật bài viết
+const updatePost = async (postId, userId, text, isQuestion) => {
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      const error = new Error('Bài viết không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (post.user.toString() !== userId.toString()) {
+      const error = new Error('Người dùng không có quyền sửa bài viết này');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    post.text = text !== undefined ? text : post.text;
+    post.isQuestion = isQuestion !== undefined ? isQuestion : post.isQuestion;
+    
+    await post.save();
+    return post;
+  } catch (error) {
+    if (error.kind === 'ObjectId') {
+      const invalidIdError = new Error('Định dạng ID bài viết không hợp lệ');
+      invalidIdError.statusCode = 400;
+      throw invalidIdError;
+    }
+    throw error;
+  }
+};
+
+// Xóa bài viết
+const deletePost = async (postId, userId) => {
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      const error = new Error('Bài viết không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+    
+    if (post.user.toString() !== userId.toString()) {
+      const error = new Error('Người dùng không có quyền xóa bài viết này');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    // Trừ điểm của comment được accept (nếu có)
+    if (post.acceptedAnswer) {
+       const acceptedComment = post.comments.id ? post.comments.id(post.acceptedAnswer) : post.comments.find(c => c._id.toString() === post.acceptedAnswer.toString());
+       if (acceptedComment && acceptedComment.user.toString() !== post.user.toString()) {
+           await User.findByIdAndUpdate(acceptedComment.user, {
+             $inc: { reputation: -10 }
+           });
+       }
+    }
+
+    await post.deleteOne();
+    return { message: 'Bài viết đã được xóa' };
+  } catch (error) {
+    if (error.kind === 'ObjectId') {
+      const invalidIdError = new Error('Định dạng ID bài viết không hợp lệ');
+      invalidIdError.statusCode = 400;
+      throw invalidIdError;
+    }
+    throw error;
+  }
+};
+
+// Cập nhật bình luận
+const updateComment = async (postId, commentId, userId, text) => {
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      const error = new Error('Bài viết không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const comment = post.comments.id ? post.comments.id(commentId) : post.comments.find(c => c._id.toString() === commentId.toString());
+    if (!comment) {
+      const error = new Error('Bình luận không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (comment.user.toString() !== userId.toString()) {
+      const error = new Error('Người dùng không có quyền sửa bình luận này');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    comment.text = text !== undefined ? text : comment.text;
+    await post.save();
+    return post.comments;
+  } catch (error) {
+    if (error.kind === 'ObjectId') {
+      const invalidIdError = new Error('Định dạng ID hợp lệ');
+      invalidIdError.statusCode = 400;
+      throw invalidIdError;
+    }
+    throw error;
+  }
+};
+
+// Xóa bình luận
+const deleteComment = async (postId, commentId, userId) => {
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      const error = new Error('Bài viết không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const commentIndex = post.comments.findIndex(c => c._id.toString() === commentId.toString());
+    if (commentIndex === -1) {
+      const error = new Error('Bình luận không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const comment = post.comments[commentIndex];
+    if (comment.user.toString() !== userId.toString() && post.user.toString() !== userId.toString()) {
+      const error = new Error('Người dùng không có quyền xóa bình luận này');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    if (post.acceptedAnswer && post.acceptedAnswer.toString() === commentId.toString()) {
+        post.acceptedAnswer = null;
+        if (comment.user.toString() !== post.user.toString()) {
+            await User.findByIdAndUpdate(comment.user, {
+                $inc: { reputation: -10 }
+            });
+        }
+    }
+
+    post.comments.splice(commentIndex, 1);
+    await post.save();
+    return post.comments;
+  } catch (error) {
+    if (error.kind === 'ObjectId') {
+      const invalidIdError = new Error('Định dạng ID hợp lệ');
+      invalidIdError.statusCode = 400;
+      throw invalidIdError;
+    }
+    throw error;
+  }
+};
+
+// Accept Answer
+const acceptAnswer = async (postId, commentId, userId) => {
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      const error = new Error('Bài viết không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (post.user.toString() !== userId.toString()) {
+      const error = new Error('Chỉ tác giả bài viết mới có thể chấp nhận câu trả lời');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    const comment = post.comments.id ? post.comments.id(commentId) : post.comments.find(c => c._id.toString() === commentId.toString());
+    if (!comment) {
+      const error = new Error('Bình luận không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (post.acceptedAnswer && post.acceptedAnswer.toString() === commentId.toString()) {
+       post.acceptedAnswer = null;
+       comment.isAccepted = false;
+       
+       if (comment.user.toString() !== userId.toString()) {
+           await User.findByIdAndUpdate(comment.user, { $inc: { reputation: -10 } });
+       }
+    } else {
+       if (post.acceptedAnswer) {
+           const oldComment = post.comments.id ? post.comments.id(post.acceptedAnswer) : post.comments.find(c => c._id.toString() === post.acceptedAnswer.toString());
+           if (oldComment) {
+               oldComment.isAccepted = false;
+               if (oldComment.user.toString() !== userId.toString()) {
+                   await User.findByIdAndUpdate(oldComment.user, { $inc: { reputation: -10 } });
+               }
+           }
+       }
+       post.acceptedAnswer = commentId;
+       comment.isAccepted = true;
+
+       if (comment.user.toString() !== userId.toString()) {
+           await User.findByIdAndUpdate(comment.user, { $inc: { reputation: 10 } });
+       }
+    }
+
+    await post.save();
+    return {
+        post,
+        comments: post.comments
+    };
+  } catch (error) {
+    if (error.kind === 'ObjectId') {
+      const invalidIdError = new Error('Định dạng ID hợp lệ');
+      invalidIdError.statusCode = 400;
+      throw invalidIdError;
+    }
+    throw error;
+  }
+};
+
 module.exports = {
   createPost,
   getPostById,
@@ -259,4 +483,9 @@ module.exports = {
   getSavedPosts,
   toggleLikePost,
   addComment,
+  updatePost,
+  deletePost,
+  updateComment,
+  deleteComment,
+  acceptAnswer,
 };

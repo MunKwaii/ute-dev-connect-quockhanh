@@ -1,14 +1,34 @@
 const Post = require('../models/Post');
 const User = require('../models/User');
+const Group = require('../models/Group');
 
-const createPost = async (userId, text, isQuestion = false, groupId = null) => {
+const createPost = async (userId, text, isQuestion = false, groupId = null, codeSnippet = '', codeLanguage = 'javascript') => {
   try {
+    // Lọc nội dung cấm hoặc AI
+    const filterService = require('./filterService');
+    await filterService.checkContent(text);
+    if (codeSnippet) {
+      await filterService.checkContent(codeSnippet);
+    }
+
     const user = await User.findById(userId).select('-password');
 
     if (!user) {
       const error = new Error('Người dùng không tồn tại');
       error.statusCode = 404;
       throw error;
+    }
+
+    let status = 'approved';
+    if (groupId) {
+      const group = await Group.findById(groupId);
+      if (group) {
+        const isAdmin = group.admin.toString() === userId.toString();
+        const isMod = group.moderators && group.moderators.some(m => m.toString() === userId.toString());
+        if (!isAdmin && !isMod) {
+          status = 'pending';
+        }
+      }
     }
 
     const newPost = new Post({
@@ -18,6 +38,9 @@ const createPost = async (userId, text, isQuestion = false, groupId = null) => {
       avatar: user.avatar,
       user: userId,
       group: groupId || null,
+      codeSnippet,
+      codeLanguage,
+      status,
     });
 
     const post = await newPost.save();
@@ -210,7 +233,7 @@ const toggleLikePost = async (postId, userId) => {
 };
 
 // Thêm bình luận vào bài viết
-const addComment = async (postId, userId, text) => {
+const addComment = async (postId, userId, text, codeSnippet = '', codeLanguage = 'javascript') => {
   try {
     const normalizedText = text ? text.trim() : '';
 
@@ -218,6 +241,13 @@ const addComment = async (postId, userId, text) => {
       const error = new Error('Nội dung bình luận không được để trống');
       error.statusCode = 400;
       throw error;
+    }
+
+    // Lọc nội dung cấm hoặc AI
+    const filterService = require('./filterService');
+    await filterService.checkContent(normalizedText);
+    if (codeSnippet) {
+      await filterService.checkContent(codeSnippet);
     }
 
     const user = await User.findById(userId).select('-password');
@@ -241,6 +271,9 @@ const addComment = async (postId, userId, text) => {
       text: normalizedText,
       name: user.name,
       avatar: user.avatar,
+      codeSnippet,
+      codeLanguage,
+      approvals: [],
     };
 
     post.comments.unshift(newComment);
@@ -262,8 +295,17 @@ const addComment = async (postId, userId, text) => {
 };
 
 // Cập nhật bài viết
-const updatePost = async (postId, userId, text, isQuestion) => {
+const updatePost = async (postId, userId, text, isQuestion, codeSnippet, codeLanguage) => {
   try {
+    // Lọc nội dung cấm hoặc AI
+    const filterService = require('./filterService');
+    if (text !== undefined) {
+      await filterService.checkContent(text);
+    }
+    if (codeSnippet !== undefined) {
+      await filterService.checkContent(codeSnippet);
+    }
+
     const post = await Post.findById(postId);
     if (!post) {
       const error = new Error('Bài viết không tồn tại');
@@ -278,6 +320,8 @@ const updatePost = async (postId, userId, text, isQuestion) => {
 
     post.text = text !== undefined ? text : post.text;
     post.isQuestion = isQuestion !== undefined ? isQuestion : post.isQuestion;
+    post.codeSnippet = codeSnippet !== undefined ? codeSnippet : post.codeSnippet;
+    post.codeLanguage = codeLanguage !== undefined ? codeLanguage : post.codeLanguage;
     
     await post.save();
     return post;
@@ -332,6 +376,12 @@ const deletePost = async (postId, userId) => {
 // Cập nhật bình luận
 const updateComment = async (postId, commentId, userId, text) => {
   try {
+    // Lọc nội dung cấm hoặc AI
+    const filterService = require('./filterService');
+    if (text !== undefined) {
+      await filterService.checkContent(text);
+    }
+
     const post = await Post.findById(postId);
     if (!post) {
       const error = new Error('Bài viết không tồn tại');
@@ -474,6 +524,59 @@ const acceptAnswer = async (postId, commentId, userId) => {
   }
 };
 
+// Phê duyệt bình luận (Upvote / Approve Comment)
+const approveComment = async (postId, commentId, userId) => {
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      const error = new Error('Bài viết không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const comment = post.comments.id ? post.comments.id(commentId) : post.comments.find(c => c._id.toString() === commentId.toString());
+    if (!comment) {
+      const error = new Error('Bình luận không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (!comment.approvals) {
+      comment.approvals = [];
+    }
+
+    const approvedIndex = comment.approvals.findIndex(
+      (app) => app.user.toString() === userId.toString()
+    );
+
+    let approved = false;
+    let reputationChange = 0;
+
+    if (approvedIndex === -1) {
+      comment.approvals.push({ user: userId });
+      approved = true;
+      reputationChange = 10; // Cộng 10 điểm uy tín
+    } else {
+      comment.approvals.splice(approvedIndex, 1);
+      approved = false;
+      reputationChange = -10; // Trừ 10 điểm uy tín
+    }
+
+    await post.save();
+
+    // Cập nhật reputation cho commenter nếu không tự upvote
+    if (comment.user && comment.user.toString() !== userId.toString()) {
+      await User.findByIdAndUpdate(comment.user, {
+        $inc: { reputation: reputationChange }
+      });
+    }
+
+    return post.comments;
+  } catch (error) {
+    throw error;
+  }
+};
+
 module.exports = {
   createPost,
   getPostById,
@@ -488,4 +591,5 @@ module.exports = {
   updateComment,
   deleteComment,
   acceptAnswer,
+  approveComment,
 };

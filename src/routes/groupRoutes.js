@@ -117,4 +117,19 @@ router.post(
   groupController.addGroupComment
 );
 
+// @route   PUT /api/groups/:id/moderator
+// @desc    Thăng chức / hạ chức Moderator (chỉ Admin nhóm)
+// @access  Private
+router.put('/:id/moderator', verifyToken, groupController.toggleModerator);
+
+// @route   GET /api/groups/:id/pending-posts
+// @desc    Lấy bài đăng chờ duyệt (chỉ Admin / Mod nhóm)
+// @access  Private
+router.get('/:id/pending-posts', verifyToken, groupController.getPendingPosts);
+
+// @route   PUT /api/groups/:id/posts/:postId/status
+// @desc    Duyệt / Từ chối bài đăng (chỉ Admin / Mod nhóm)
+// @access  Private
+router.put('/:id/posts/:postId/status', verifyToken, groupController.updatePostStatus);
+
 module.exports = router;

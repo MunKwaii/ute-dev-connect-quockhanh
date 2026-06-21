@@ -21,6 +21,13 @@ const GroupSchema = new Schema({
     ref: 'user',
     required: true
   },
+  // Danh sách kiểm duyệt viên
+  moderators: [
+    {
+      type: Schema.Types.ObjectId,
+      ref: 'user'
+    }
+  ],
   // Danh sách thành viên (bao gồm cả admin)
   members: [
     {

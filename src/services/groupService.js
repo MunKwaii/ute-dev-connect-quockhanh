@@ -65,7 +65,8 @@ const getAllGroups = async (page = 1, limit = 10, keyword = '') => {
 const getGroupById = async (groupId, userId) => {
   const group = await Group.findOne({ _id: groupId, isActive: true })
     .populate('admin', 'name avatar')
-    .populate('members.user', 'name avatar');
+    .populate('members.user', 'name avatar')
+    .populate('moderators', 'name avatar');
 
   if (!group) {
     const err = new Error('Nhóm không tồn tại hoặc đã bị xóa');
@@ -77,6 +78,7 @@ const getGroupById = async (groupId, userId) => {
     ...group.toObject(),
     isMember: userId ? isMember(group, userId) : false,
     isAdmin: userId ? group.admin._id.toString() === userId.toString() : false,
+    isMod: userId ? group.moderators && group.moderators.some(m => (m._id || m).toString() === userId.toString()) : false,
     membersCount: group.members.length,
   };
 };
@@ -167,18 +169,143 @@ const deleteGroup = async (groupId, userId) => {
  * Lấy newsfeed của nhóm (chỉ thành viên mới xem được)
  * Việc kiểm tra tư cách thành viên được thực hiện bởi middleware requireGroupMember
  */
-const getGroupFeed = async (groupId, page = 1, limit = 10) => {
+const getGroupFeed = async (groupId, userId, page = 1, limit = 10) => {
   const skip = (page - 1) * limit;
 
-  const posts = await Post.find({ group: groupId })
+  const filter = {
+    group: groupId,
+    $or: [
+      { status: 'approved' },
+      { user: userId, status: 'pending' }
+    ]
+  };
+
+  const posts = await Post.find(filter)
     .sort({ date: -1 })
     .skip(skip)
     .limit(limit);
 
-  const total = await Post.countDocuments({ group: groupId });
+  const total = await Post.countDocuments(filter);
   const hasMore = total > skip + posts.length;
 
   return { posts, total, hasMore };
+};
+
+/**
+ * Thăng chức / hạ chức Moderator (kiểm duyệt viên)
+ */
+const toggleModerator = async (groupId, adminId, targetUserId) => {
+  const group = await Group.findOne({ _id: groupId, isActive: true });
+  if (!group) {
+    const err = new Error('Nhóm không tồn tại');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  // 1. Kiểm tra xem người gọi có phải admin nhóm không
+  if (group.admin.toString() !== adminId.toString()) {
+    const err = new Error('Chỉ admin nhóm mới có quyền thăng chức/bãi chức kiểm duyệt viên');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  // 2. Không được tự thăng chức/hạ chức chính mình
+  if (targetUserId.toString() === adminId.toString()) {
+    const err = new Error('Không thể thăng chức/bãi chức chủ nhóm');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // 3. Kiểm tra xem targetUserId có phải thành viên nhóm không
+  const isTargetMember = group.members.some(m => m.user.toString() === targetUserId.toString());
+  if (!isTargetMember) {
+    const err = new Error('Người dùng không phải thành viên của nhóm này');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!group.moderators) {
+    group.moderators = [];
+  }
+
+  const modIndex = group.moderators.findIndex(m => m.toString() === targetUserId.toString());
+  let action = '';
+
+  if (modIndex === -1) {
+    group.moderators.push(targetUserId);
+    action = 'promote';
+  } else {
+    group.moderators.splice(modIndex, 1);
+    action = 'demote';
+  }
+
+  await group.save();
+  return { group, action };
+};
+
+/**
+ * Lấy danh sách bài đăng chờ duyệt (chỉ admin / mod)
+ */
+const getPendingPosts = async (groupId, userId) => {
+  const group = await Group.findOne({ _id: groupId, isActive: true });
+  if (!group) {
+    const err = new Error('Nhóm không tồn tại');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const isAdmin = group.admin.toString() === userId.toString();
+  const isMod = group.moderators && group.moderators.some(m => m.toString() === userId.toString());
+
+  if (!isAdmin && !isMod) {
+    const err = new Error('Chỉ admin hoặc kiểm duyệt viên mới có quyền xem bài viết chờ duyệt');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const posts = await Post.find({ group: groupId, status: 'pending' }).sort({ date: -1 });
+  return posts;
+};
+
+/**
+ * Phê duyệt / từ chối bài viết (chỉ admin / mod)
+ */
+const updatePostStatus = async (groupId, postId, userId, status) => {
+  const group = await Group.findOne({ _id: groupId, isActive: true });
+  if (!group) {
+    const err = new Error('Nhóm không tồn tại');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const isAdmin = group.admin.toString() === userId.toString();
+  const isMod = group.moderators && group.moderators.some(m => m.toString() === userId.toString());
+
+  if (!isAdmin && !isMod) {
+    const err = new Error('Chỉ admin hoặc kiểm duyệt viên mới có quyền duyệt bài viết');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const post = await Post.findOne({ _id: postId, group: groupId });
+  if (!post) {
+    const err = new Error('Bài viết không tồn tại trong nhóm này');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (status === 'approved') {
+    post.status = 'approved';
+    await post.save();
+  } else if (status === 'rejected') {
+    await post.deleteOne();
+  } else {
+    const err = new Error('Trạng thái duyệt không hợp lệ');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return { message: status === 'approved' ? 'Đã phê duyệt bài viết' : 'Đã từ chối và xóa bài viết' };
 };
 
 module.exports = {
@@ -190,4 +317,7 @@ module.exports = {
   deleteGroup,
   getGroupFeed,
   isMember,
+  toggleModerator,
+  getPendingPosts,
+  updatePostStatus,
 };

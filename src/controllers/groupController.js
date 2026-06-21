@@ -120,8 +120,9 @@ const getGroupFeed = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
+    const userId = getUserId(req);
 
-    const result = await groupService.getGroupFeed(req.params.id, page, limit);
+    const result = await groupService.getGroupFeed(req.params.id, userId, page, limit);
 
     res.status(200).json({
       success: true,
@@ -149,7 +150,14 @@ const createGroupPost = async (req, res) => {
     const userId = getUserId(req);
     const groupId = req.params.id;
 
-    const post = await postService.createPost(userId, req.body.text, groupId);
+    const post = await postService.createPost(
+      userId,
+      req.body.text,
+      req.body.isQuestion || false,
+      groupId,
+      req.body.codeSnippet || '',
+      req.body.codeLanguage || 'javascript'
+    );
 
     res.status(201).json({ success: true, message: 'Đăng bài trong nhóm thành công', data: post });
   } catch (err) {
@@ -179,6 +187,69 @@ const addGroupComment = async (req, res) => {
   }
 };
 
+// @desc    Thăng chức / hạ chức Moderator (kiểm duyệt viên)
+// @access  Private
+const toggleModerator = async (req, res) => {
+  try {
+    const adminId = getUserId(req);
+    const groupId = req.params.id;
+    const { userId } = req.body;
+
+    const result = await groupService.toggleModerator(groupId, adminId, userId);
+
+    res.status(200).json({
+      success: true,
+      message: result.action === 'promote' ? 'Đã thăng chức kiểm duyệt viên thành công' : 'Đã hạ chức kiểm duyệt viên thành công',
+      data: result.group
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Lấy danh sách bài viết chờ duyệt (chỉ admin / mod)
+// @access  Private
+const getPendingPosts = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const groupId = req.params.id;
+
+    const posts = await groupService.getPendingPosts(groupId, userId);
+
+    res.status(200).json({
+      success: true,
+      data: posts
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Phê duyệt hoặc từ chối bài viết (chỉ admin / mod)
+// @access  Private
+const updatePostStatus = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { id, postId } = req.params;
+    const { status } = req.body;
+
+    const result = await groupService.updatePostStatus(id, postId, userId, status);
+
+    res.status(200).json({
+      success: true,
+      message: result.message
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
 module.exports = {
   createGroup,
   getAllGroups,
@@ -189,4 +260,7 @@ module.exports = {
   getGroupFeed,
   createGroupPost,
   addGroupComment,
+  toggleModerator,
+  getPendingPosts,
+  updatePostStatus,
 };

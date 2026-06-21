@@ -12,6 +12,15 @@ const PostSchema = new Schema({
   codeSnippet: {
     type: String
   },
+  codeLanguage: {
+    type: String,
+    default: 'javascript'
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'approved'
+  },
   tags: {
     type: [String],
     default: []
@@ -45,12 +54,29 @@ const PostSchema = new Schema({
   comments: [
     {
       user: {
-        type: Schema.Types.ObjectId
+        type: Schema.Types.ObjectId,
+        ref: 'user'
       },
       text: {
         type: String,
         required: true
       },
+      codeSnippet: {
+        type: String,
+        default: ''
+      },
+      codeLanguage: {
+        type: String,
+        default: 'javascript'
+      },
+      approvals: [
+        {
+          user: {
+            type: Schema.Types.ObjectId,
+            ref: 'user'
+          }
+        }
+      ],
       name: {
         type: String
       },

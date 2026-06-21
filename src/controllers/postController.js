@@ -27,7 +27,14 @@ const addPost = async (req, res) => {
       });
     }
 
-    const post = await postService.createPost(userId, req.body.text, req.body.isQuestion);
+    const post = await postService.createPost(
+      userId, 
+      req.body.text, 
+      req.body.isQuestion, 
+      req.body.groupId, 
+      req.body.codeSnippet, 
+      req.body.codeLanguage
+    );
 
     res.status(201).json({
       success: true,
@@ -35,6 +42,13 @@ const addPost = async (req, res) => {
     });
   } catch (err) {
     console.error(err.message);
+
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({
+        success: false,
+        message: err.message,
+      });
+    }
 
     res.status(500).json({
       success: false,
@@ -262,7 +276,9 @@ const addComment = async (req, res) => {
     const result = await postService.addComment(
       req.params.id,
       userId,
-      req.body.text
+      req.body.text,
+      req.body.codeSnippet,
+      req.body.codeLanguage
     );
 
     // Tạo thông báo khi comment mới
@@ -319,7 +335,14 @@ const updatePost = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Không xác định được người dùng từ token' });
     }
 
-    const post = await postService.updatePost(req.params.id, userId, req.body.text, req.body.isQuestion);
+    const post = await postService.updatePost(
+      req.params.id, 
+      userId, 
+      req.body.text, 
+      req.body.isQuestion,
+      req.body.codeSnippet,
+      req.body.codeLanguage
+    );
 
     res.status(200).json({
       success: true,
@@ -423,6 +446,26 @@ const acceptAnswer = async (req, res) => {
   }
 };
 
+// @desc    Phê duyệt bình luận (Upvote / Approve Comment)
+const approveComment = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const comments = await postService.approveComment(req.params.id, req.params.comment_id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Cập nhật trạng thái phê duyệt bình luận thành công',
+      data: comments,
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
 module.exports = {
   addPost,
   getPost,
@@ -437,4 +480,5 @@ module.exports = {
   updateComment,
   deleteComment,
   acceptAnswer,
+  approveComment,
 };

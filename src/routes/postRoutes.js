@@ -68,6 +68,11 @@ router.post(
 // @access  Private
 router.put('/accept/:id/:comment_id', verifyToken, postController.acceptAnswer);
 
+// @route   PUT /api/posts/comment/:id/:comment_id/approve
+// @desc    Phê duyệt bình luận (Upvote)
+// @access  Private
+router.put('/comment/:id/:comment_id/approve', verifyToken, postController.approveComment);
+
 // @route   PUT /api/posts/comment/:id/:comment_id
 // @desc    Sửa bình luận
 // @access  Private

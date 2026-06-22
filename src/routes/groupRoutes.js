@@ -25,11 +25,16 @@ const requireGroupMember = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Nhóm không tồn tại' });
     }
 
+    // Kiểm tra xem là thành viên, admin hoặc mod của nhóm
     const isMember = group.members.some(
-      (m) => m.user.toString() === userId.toString()
+      (m) => m.user && m.user.toString() === userId.toString()
+    );
+    const isAdmin = group.admin && group.admin.toString() === userId.toString();
+    const isMod = group.moderators && group.moderators.some(
+      (m) => m.toString() === userId.toString()
     );
 
-    if (!isMember) {
+    if (!isMember && !isAdmin && !isMod) {
       return res.status(403).json({
         success: false,
         message: 'Bạn cần là thành viên của nhóm để thực hiện hành động này',

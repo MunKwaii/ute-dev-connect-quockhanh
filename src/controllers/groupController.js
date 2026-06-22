@@ -177,7 +177,13 @@ const addGroupComment = async (req, res) => {
 
   try {
     const userId = getUserId(req);
-    const result = await postService.addComment(req.params.postId, userId, req.body.text);
+    const result = await postService.addComment(
+      req.params.postId,
+      userId,
+      req.body.text,
+      req.body.codeSnippet || '',
+      req.body.codeLanguage || 'javascript'
+    );
 
     res.status(201).json({ success: true, message: 'Bình luận thành công', data: result.comments });
   } catch (err) {

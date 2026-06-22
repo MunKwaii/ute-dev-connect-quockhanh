@@ -2,13 +2,13 @@ const express = require('express');
 const router = express.Router();
 const { check } = require('express-validator');
 
-const { verifyToken } = require('../middlewares/authMiddleware');
+const { verifyToken, optionalToken } = require('../middlewares/authMiddleware');
 const postController = require('../controllers/postController');
 
 // @route   GET /api/posts
 // @desc    Lấy tất cả bài viết
 // @access  Public
-router.get('/', postController.getAllPosts);
+router.get('/', optionalToken, postController.getAllPosts);
 
 // @route   POST /api/posts
 // @desc    Tạo bài viết mới
@@ -27,7 +27,7 @@ router.post(
 // @route   GET /api/posts/top-trending
 // @desc    Lấy top 10 bài viết nổi bật
 // @access  Public
-router.get('/top-trending', postController.getTopTrendingPosts);
+router.get('/top-trending', optionalToken, postController.getTopTrendingPosts);
 
 // Đặt các route cụ thể trước /:id để tránh bị hiểu nhầm là id bài viết
 
@@ -40,6 +40,16 @@ router.put('/save/:id', verifyToken, postController.savePost);
 // @desc    Lấy danh sách bài viết đã lưu
 // @access  Private
 router.get('/saved', verifyToken, postController.getSavedPosts);
+
+// @route   GET /api/posts/hidden
+// @desc    Lấy danh sách bài viết đã ẩn
+// @access  Private
+router.get('/hidden', verifyToken, postController.getHiddenPosts);
+
+// @route   PUT /api/posts/hide/:id
+// @desc    Ẩn / Hiện bài viết
+// @access  Private
+router.put('/hide/:id', verifyToken, postController.hidePost);
 
 // @route   PUT /api/posts/like/:id
 // @desc    Like / Unlike bài viết
@@ -117,6 +127,6 @@ router.delete('/:id', verifyToken, postController.deletePost);
 // @route   GET /api/posts/:id
 // @desc    Lấy bài viết theo ID
 // @access  Public
-router.get('/:id', postController.getPost);
+router.get('/:id', optionalToken, postController.getPost);
 
 module.exports = router;

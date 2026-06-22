@@ -26,6 +26,21 @@ const verifyToken = (req, res, next) => {
     }
 };
 
+const optionalToken = (req, res, next) => {
+    const authHeader = req.header('Authorization') || req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return next();
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'ute_social_network_secret');
+        req.user = decoded.user || decoded;
+    } catch (err) {
+        // Ignore token errors for optional check
+    }
+    next();
+};
+
 // Hàm phân quyền do bạn viết (Code của feature/login)
 const authorizeRole = (requiredRole) => {
     return (req, res, next) => {
@@ -45,4 +60,4 @@ const authorizeRole = (requiredRole) => {
 
 // Còn nếu nhóm đang dùng cách import: const { verifyToken } = require('...');
 // Thì dùng dòng export này:
-module.exports = { verifyToken, authorizeRole };
+module.exports = { verifyToken, authorizeRole, optionalToken };

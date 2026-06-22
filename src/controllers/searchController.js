@@ -13,10 +13,11 @@ const searchAll = async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 10;
 
     let result;
+    const currentUserId = req.user?.id || req.user?._id || req.user?.userId || null;
 
     switch (type) {
       case 'posts':
-        result = await searchService.searchPosts(keyword, tag, page, limit);
+        result = await searchService.searchPosts(keyword, tag, page, limit, currentUserId);
         return res.status(200).json({
           success: true,
           type: 'posts',

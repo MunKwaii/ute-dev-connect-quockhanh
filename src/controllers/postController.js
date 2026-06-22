@@ -33,7 +33,8 @@ const addPost = async (req, res) => {
       req.body.isQuestion, 
       req.body.groupId, 
       req.body.codeSnippet, 
-      req.body.codeLanguage
+      req.body.codeLanguage,
+      req.body.visibility
     );
 
     res.status(201).json({
@@ -59,7 +60,7 @@ const addPost = async (req, res) => {
 
 const getPost = async (req, res) => {
   try {
-    const post = await postService.getPostById(req.params.id);
+    const post = await postService.getPostById(req.params.id, getUserId(req));
 
     res.status(200).json({
       success: true,
@@ -88,7 +89,7 @@ const getAllPosts = async (req, res) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 5;
 
-    const result = await postService.getAllPosts(page, limit);
+    const result = await postService.getAllPosts(page, limit, getUserId(req));
 
     res.status(200).json({
       success: true,
@@ -111,7 +112,7 @@ const getAllPosts = async (req, res) => {
 // @desc    Lấy top 10 bài viết nổi bật
 const getTopTrendingPosts = async (req, res) => {
   try {
-    const posts = await postService.getTopTrendingPosts();
+    const posts = await postService.getTopTrendingPosts(getUserId(req));
 
     res.status(200).json({
       success: true,
@@ -341,7 +342,8 @@ const updatePost = async (req, res) => {
       req.body.text, 
       req.body.isQuestion,
       req.body.codeSnippet,
-      req.body.codeLanguage
+      req.body.codeLanguage,
+      req.body.visibility
     );
 
     res.status(200).json({
@@ -466,6 +468,49 @@ const approveComment = async (req, res) => {
   }
 };
 
+// @desc    Ẩn / Hiện bài viết
+const hidePost = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Không xác định được người dùng từ token' });
+    }
+    const post = await postService.toggleHidePost(req.params.id, userId);
+    res.status(200).json({
+      success: true,
+      message: post.isHidden ? 'Đã ẩn bài viết' : 'Đã hiện bài viết',
+      data: post,
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode === 404 || err.statusCode === 400 || err.statusCode === 401) {
+      return res.status(err.statusCode).json({ success: false, message: err.message });
+    }
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+// @desc    Lấy danh sách bài viết đã ẩn
+const getHiddenPosts = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Không xác định được người dùng từ token' });
+    }
+    const posts = await postService.getHiddenPosts(userId);
+    res.status(200).json({
+      success: true,
+      data: posts,
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, message: err.message });
+    }
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
 module.exports = {
   addPost,
   getPost,
@@ -477,6 +522,8 @@ module.exports = {
   addComment,
   updatePost,
   deletePost,
+  hidePost,
+  getHiddenPosts,
   updateComment,
   deleteComment,
   acceptAnswer,

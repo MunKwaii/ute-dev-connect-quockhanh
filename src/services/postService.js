@@ -43,7 +43,8 @@ const createPost = async (userId, text, isQuestion = false, groupId = null, code
       status,
     });
 
-    const post = await newPost.save();
+    let post = await newPost.save();
+    post = await Post.findById(post._id).populate('user', 'name avatar reputation');
     return post;
   } catch (error) {
     throw error;
@@ -52,7 +53,9 @@ const createPost = async (userId, text, isQuestion = false, groupId = null, code
 
 const getPostById = async (postId) => {
   try {
-    const post = await Post.findById(postId);
+    const post = await Post.findById(postId)
+      .populate('user', 'name avatar reputation')
+      .populate('comments.user', 'name avatar reputation');
 
     if (!post) {
       const error = new Error('Bài viết không tồn tại');
@@ -80,6 +83,7 @@ const getAllPosts = async (page = 1, limit = 5) => {
     const filter = { group: null };
 
     const posts = await Post.find(filter)
+      .populate('user', 'name avatar reputation')
       .sort({ date: -1 })
       .skip(skip)
       .limit(limit);
@@ -117,6 +121,9 @@ const getTopTrendingPosts = async () => {
         $limit: 10,
       },
     ]);
+
+    // Populate user details for trending posts
+    await Post.populate(posts, { path: 'user', select: 'name avatar reputation' });
 
     return posts;
   } catch (error) {
@@ -278,6 +285,7 @@ const addComment = async (postId, userId, text, codeSnippet = '', codeLanguage =
 
     post.comments.unshift(newComment);
     await post.save();
+    await post.populate('comments.user', 'name avatar reputation');
 
     return {
       comments: post.comments,
@@ -324,6 +332,7 @@ const updatePost = async (postId, userId, text, isQuestion, codeSnippet, codeLan
     post.codeLanguage = codeLanguage !== undefined ? codeLanguage : post.codeLanguage;
     
     await post.save();
+    await post.populate('user', 'name avatar reputation');
     return post;
   } catch (error) {
     if (error.kind === 'ObjectId') {
@@ -404,6 +413,7 @@ const updateComment = async (postId, commentId, userId, text) => {
 
     comment.text = text !== undefined ? text : comment.text;
     await post.save();
+    await post.populate('comments.user', 'name avatar reputation');
     return post.comments;
   } catch (error) {
     if (error.kind === 'ObjectId') {
@@ -450,6 +460,7 @@ const deleteComment = async (postId, commentId, userId) => {
 
     post.comments.splice(commentIndex, 1);
     await post.save();
+    await post.populate('comments.user', 'name avatar reputation');
     return post.comments;
   } catch (error) {
     if (error.kind === 'ObjectId') {
@@ -510,6 +521,8 @@ const acceptAnswer = async (postId, commentId, userId) => {
     }
 
     await post.save();
+    await post.populate('user', 'name avatar reputation');
+    await post.populate('comments.user', 'name avatar reputation');
     return {
         post,
         comments: post.comments
@@ -571,6 +584,7 @@ const approveComment = async (postId, commentId, userId) => {
       });
     }
 
+    await post.populate('comments.user', 'name avatar reputation');
     return post.comments;
   } catch (error) {
     throw error;

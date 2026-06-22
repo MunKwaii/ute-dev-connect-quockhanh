@@ -181,6 +181,8 @@ const getGroupFeed = async (groupId, userId, page = 1, limit = 10) => {
   };
 
   const posts = await Post.find(filter)
+    .populate('user', 'name avatar reputation')
+    .populate('comments.user', 'name avatar reputation')
     .sort({ date: -1 })
     .skip(skip)
     .limit(limit);
@@ -263,7 +265,10 @@ const getPendingPosts = async (groupId, userId) => {
     throw err;
   }
 
-  const posts = await Post.find({ group: groupId, status: 'pending' }).sort({ date: -1 });
+  const posts = await Post.find({ group: groupId, status: 'pending' })
+    .populate('user', 'name avatar reputation')
+    .populate('comments.user', 'name avatar reputation')
+    .sort({ date: -1 });
   return posts;
 };
 

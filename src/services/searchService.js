@@ -9,14 +9,49 @@ const Profile = require('../models/Profile');
  * - Hoặc filter theo tag cụ thể
  * - Chỉ tìm trong bài viết PUBLIC (group: null)
  */
-const searchPosts = async (keyword = '', tag = '', page = 1, limit = 10) => {
+const searchPosts = async (keyword = '', tag = '', page = 1, limit = 10, currentUserId = null) => {
   const skip = (page - 1) * limit;
 
-  let filter = { group: null }; // Chỉ tìm bài public
+  let filter = { 
+    group: null,
+    isDeleted: { $ne: true },
+    isHidden: { $ne: true }
+  };
 
   if (tag && tag.trim()) {
     // Lọc chính xác theo tag (ví dụ: "react", "nodejs")
     filter.tags = { $in: [tag.trim().toLowerCase()] };
+  }
+
+  // Lọc theo visibility
+  if (currentUserId) {
+    const user = await User.findById(currentUserId);
+    if (user) {
+      const followingIds = user.following.map(f => f.user);
+      const followerIds = user.followers.map(f => f.user);
+      const friendIds = followingIds.filter(id => 
+        followerIds.some(fId => fId.toString() === id.toString())
+      );
+
+      filter.$and = [
+        {
+          $or: [
+            { visibility: 'public' },
+            { visibility: { $exists: false } },
+            { user: currentUserId },
+            { visibility: 'followers', user: { $in: followingIds } },
+            { visibility: 'friends', user: { $in: friendIds } }
+          ]
+        }
+      ];
+    } else {
+      filter.visibility = 'public';
+    }
+  } else {
+    filter.$or = [
+      { visibility: 'public' },
+      { visibility: { $exists: false } }
+    ];
   }
 
   let posts;
@@ -27,6 +62,7 @@ const searchPosts = async (keyword = '', tag = '', page = 1, limit = 10) => {
     filter.$text = { $search: keyword.trim() };
 
     posts = await Post.find(filter, { score: { $meta: 'textScore' } })
+      .populate('user', 'name avatar reputation')
       .sort({ score: { $meta: 'textScore' }, date: -1 })
       .skip(skip)
       .limit(limit);
@@ -34,7 +70,11 @@ const searchPosts = async (keyword = '', tag = '', page = 1, limit = 10) => {
     total = await Post.countDocuments(filter);
   } else {
     // Không có keyword → chỉ lọc theo tag hoặc trả về tất cả
-    posts = await Post.find(filter).sort({ date: -1 }).skip(skip).limit(limit);
+    posts = await Post.find(filter)
+      .populate('user', 'name avatar reputation')
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
     total = await Post.countDocuments(filter);
   }
 

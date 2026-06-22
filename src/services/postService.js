@@ -2,7 +2,7 @@ const Post = require('../models/Post');
 const User = require('../models/User');
 const Group = require('../models/Group');
 
-const createPost = async (userId, text, isQuestion = false, groupId = null, codeSnippet = '', codeLanguage = 'javascript') => {
+const createPost = async (userId, text, isQuestion = false, groupId = null, codeSnippet = '', codeLanguage = 'javascript', visibility = 'public') => {
   try {
     // Lọc nội dung cấm hoặc AI
     const filterService = require('./filterService');
@@ -41,6 +41,7 @@ const createPost = async (userId, text, isQuestion = false, groupId = null, code
       codeSnippet,
       codeLanguage,
       status,
+      visibility,
     });
 
     let post = await newPost.save();
@@ -51,16 +52,62 @@ const createPost = async (userId, text, isQuestion = false, groupId = null, code
   }
 };
 
-const getPostById = async (postId) => {
+const getPostById = async (postId, currentUserId = null) => {
   try {
     const post = await Post.findById(postId)
       .populate('user', 'name avatar reputation')
       .populate('comments.user', 'name avatar reputation');
 
-    if (!post) {
+    if (!post || post.isDeleted) {
       const error = new Error('Bài viết không tồn tại');
       error.statusCode = 404;
       throw error;
+    }
+
+    // Check hidden post access
+    if (post.isHidden && post.user?._id?.toString() !== currentUserId?.toString()) {
+      const error = new Error('Bài viết đã bị ẩn');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    // Check visibility logic
+    if (post.visibility && post.visibility !== 'public' && post.user?._id?.toString() !== currentUserId?.toString()) {
+      if (!currentUserId) {
+        const error = new Error('Bạn không có quyền xem bài viết này');
+        error.statusCode = 401;
+        throw error;
+      }
+
+      const viewer = await User.findById(currentUserId);
+      if (!viewer) {
+        const error = new Error('Bạn không có quyền xem bài viết này');
+        error.statusCode = 401;
+        throw error;
+      }
+
+      const authorId = post.user?._id?.toString() || post.user?.toString();
+      const followingIds = viewer.following.map(f => f.user?.toString());
+      const followerIds = viewer.followers.map(f => f.user?.toString());
+
+      if (post.visibility === 'personal') {
+        const error = new Error('Bài viết này ở chế độ cá nhân');
+        error.statusCode = 403;
+        throw error;
+      } else if (post.visibility === 'followers') {
+        if (!followingIds.includes(authorId)) {
+          const error = new Error('Bài viết này chỉ hiển thị với người theo dõi');
+          error.statusCode = 403;
+          throw error;
+        }
+      } else if (post.visibility === 'friends') {
+        const isFriend = followingIds.includes(authorId) && followerIds.includes(authorId);
+        if (!isFriend) {
+          const error = new Error('Bài viết này chỉ hiển thị với bạn bè (theo dõi chéo)');
+          error.statusCode = 403;
+          throw error;
+        }
+      }
     }
 
     return post;
@@ -75,12 +122,41 @@ const getPostById = async (postId) => {
   }
 };
 
-const getAllPosts = async (page = 1, limit = 5) => {
+const getAllPosts = async (page = 1, limit = 5, currentUserId = null) => {
   try {
     const skip = (page - 1) * limit;
 
-    // Chỉ lấy bài viết public (không thuộc nhóm nào)
-    const filter = { group: null };
+    let filter = { 
+      group: null,
+      isDeleted: { $ne: true },
+      isHidden: { $ne: true }
+    };
+
+    if (currentUserId) {
+      const user = await User.findById(currentUserId);
+      if (user) {
+        const followingIds = user.following.map(f => f.user);
+        const followerIds = user.followers.map(f => f.user);
+        const friendIds = followingIds.filter(id => 
+          followerIds.some(fId => fId.toString() === id.toString())
+        );
+
+        filter.$or = [
+          { visibility: 'public' },
+          { visibility: { $exists: false } },
+          { user: currentUserId },
+          { visibility: 'followers', user: { $in: followingIds } },
+          { visibility: 'friends', user: { $in: friendIds } }
+        ];
+      } else {
+        filter.visibility = 'public';
+      }
+    } else {
+      filter.$or = [
+        { visibility: 'public' },
+        { visibility: { $exists: false } }
+      ];
+    }
 
     const posts = await Post.find(filter)
       .populate('user', 'name avatar reputation')
@@ -101,9 +177,44 @@ const getAllPosts = async (page = 1, limit = 5) => {
   }
 };
 
-const getTopTrendingPosts = async () => {
+const getTopTrendingPosts = async (currentUserId = null) => {
   try {
+    let matchFilter = {
+      group: null,
+      isDeleted: { $ne: true },
+      isHidden: { $ne: true }
+    };
+
+    if (currentUserId) {
+      const user = await User.findById(currentUserId);
+      if (user) {
+        const followingIds = user.following.map(f => f.user);
+        const followerIds = user.followers.map(f => f.user);
+        const friendIds = followingIds.filter(id => 
+          followerIds.some(fId => fId.toString() === id.toString())
+        );
+
+        matchFilter.$or = [
+          { visibility: 'public' },
+          { visibility: { $exists: false } },
+          { user: user._id },
+          { visibility: 'followers', user: { $in: followingIds } },
+          { visibility: 'friends', user: { $in: friendIds } }
+        ];
+      } else {
+        matchFilter.visibility = 'public';
+      }
+    } else {
+      matchFilter.$or = [
+        { visibility: 'public' },
+        { visibility: { $exists: false } }
+      ];
+    }
+
     const posts = await Post.aggregate([
+      {
+        $match: matchFilter
+      },
       {
         $addFields: {
           likesCount: { $size: { $ifNull: ['$likes', []] } },
@@ -303,7 +414,7 @@ const addComment = async (postId, userId, text, codeSnippet = '', codeLanguage =
 };
 
 // Cập nhật bài viết
-const updatePost = async (postId, userId, text, isQuestion, codeSnippet, codeLanguage) => {
+const updatePost = async (postId, userId, text, isQuestion, codeSnippet, codeLanguage, visibility) => {
   try {
     // Lọc nội dung cấm hoặc AI
     const filterService = require('./filterService');
@@ -315,7 +426,7 @@ const updatePost = async (postId, userId, text, isQuestion, codeSnippet, codeLan
     }
 
     const post = await Post.findById(postId);
-    if (!post) {
+    if (!post || post.isDeleted) {
       const error = new Error('Bài viết không tồn tại');
       error.statusCode = 404;
       throw error;
@@ -330,6 +441,7 @@ const updatePost = async (postId, userId, text, isQuestion, codeSnippet, codeLan
     post.isQuestion = isQuestion !== undefined ? isQuestion : post.isQuestion;
     post.codeSnippet = codeSnippet !== undefined ? codeSnippet : post.codeSnippet;
     post.codeLanguage = codeLanguage !== undefined ? codeLanguage : post.codeLanguage;
+    post.visibility = visibility !== undefined ? visibility : post.visibility;
     
     await post.save();
     await post.populate('user', 'name avatar reputation');
@@ -348,7 +460,7 @@ const updatePost = async (postId, userId, text, isQuestion, codeSnippet, codeLan
 const deletePost = async (postId, userId) => {
   try {
     const post = await Post.findById(postId);
-    if (!post) {
+    if (!post || post.isDeleted) {
       const error = new Error('Bài viết không tồn tại');
       error.statusCode = 404;
       throw error;
@@ -370,7 +482,8 @@ const deletePost = async (postId, userId) => {
        }
     }
 
-    await post.deleteOne();
+    post.isDeleted = true;
+    await post.save();
     return { message: 'Bài viết đã được xóa' };
   } catch (error) {
     if (error.kind === 'ObjectId') {
@@ -378,6 +491,51 @@ const deletePost = async (postId, userId) => {
       invalidIdError.statusCode = 400;
       throw invalidIdError;
     }
+    throw error;
+  }
+};
+
+const toggleHidePost = async (postId, userId) => {
+  try {
+    const post = await Post.findById(postId);
+    if (!post || post.isDeleted) {
+      const error = new Error('Bài viết không tồn tại');
+      error.statusCode = 404;
+      throw error;
+    }
+    
+    if (post.user.toString() !== userId.toString()) {
+      const error = new Error('Người dùng không có quyền ẩn bài viết này');
+      error.statusCode = 401;
+      throw error;
+    }
+
+    post.isHidden = !post.isHidden;
+    await post.save();
+    await post.populate('user', 'name avatar reputation');
+    return post;
+  } catch (error) {
+    if (error.kind === 'ObjectId') {
+      const invalidIdError = new Error('Định dạng ID bài viết không hợp lệ');
+      invalidIdError.statusCode = 400;
+      throw invalidIdError;
+    }
+    throw error;
+  }
+};
+
+const getHiddenPosts = async (userId) => {
+  try {
+    const posts = await Post.find({
+      user: userId,
+      isHidden: true,
+      isDeleted: { $ne: true }
+    })
+    .populate('user', 'name avatar reputation')
+    .sort({ date: -1 });
+
+    return posts;
+  } catch (error) {
     throw error;
   }
 };
@@ -602,6 +760,8 @@ module.exports = {
   addComment,
   updatePost,
   deletePost,
+  toggleHidePost,
+  getHiddenPosts,
   updateComment,
   deleteComment,
   acceptAnswer,

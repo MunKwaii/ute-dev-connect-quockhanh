@@ -45,6 +45,19 @@ const PostSchema = new Schema({
     type: Schema.Types.ObjectId,
     default: null
   },
+  visibility: {
+    type: String,
+    enum: ['public', 'personal', 'followers', 'friends'],
+    default: 'public'
+  },
+  isHidden: {
+    type: Boolean,
+    default: false
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
   likes: [
     {
       user: {

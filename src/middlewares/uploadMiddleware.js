@@ -21,10 +21,34 @@ const storage = multer.diskStorage({
   }
 });
 
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    'application/pdf',
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'video/mp4', 'video/webm'
+  ];
+  
+  const dangerousExtensions = ['.exe', '.bat', '.sh', '.cmd', '.msi', '.com', '.scr', '.ps1', '.vbs', '.js'];
+  const ext = '.' + file.originalname.split('.').pop().toLowerCase();
+  
+  if (dangerousExtensions.includes(ext)) {
+    return cb(new Error('Định dạng file không được hỗ trợ'), false);
+  }
+  
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Định dạng file không được hỗ trợ'), false);
+  }
+};
+
 // Cấu hình upload với giới hạn kích thước 10MB
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: fileFilter
 });
 
 module.exports = upload;

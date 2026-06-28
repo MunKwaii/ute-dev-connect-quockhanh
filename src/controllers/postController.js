@@ -109,6 +109,33 @@ const getAllPosts = async (req, res) => {
   }
 };
 
+// @desc    Lấy bài viết của người dùng
+const getUserPosts = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 5;
+    const targetUserId = req.params.userId;
+
+    const result = await postService.getUserPosts(targetUserId, page, limit, getUserId(req));
+
+    res.status(200).json({
+      success: true,
+      data: result.posts,
+      hasMore: result.hasMore,
+      total: result.total,
+      page,
+      limit,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi Server',
+    });
+  }
+};
+
+
 // @desc    Lấy top 10 bài viết nổi bật
 const getTopTrendingPosts = async (req, res) => {
   try {
@@ -168,6 +195,8 @@ const savePost = async (req, res) => {
 const getSavedPosts = async (req, res) => {
   try {
     const userId = getUserId(req);
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
 
     if (!userId) {
       return res.status(401).json({
@@ -176,11 +205,15 @@ const getSavedPosts = async (req, res) => {
       });
     }
 
-    const posts = await postService.getSavedPosts(userId);
+    const result = await postService.getSavedPosts(userId, page, limit);
 
     res.status(200).json({
       success: true,
-      data: posts,
+      data: result.posts,
+      hasMore: result.hasMore,
+      total: result.total,
+      page,
+      limit,
     });
   } catch (err) {
     console.error(err.message);
@@ -494,16 +527,28 @@ const hidePost = async (req, res) => {
 const getHiddenPosts = async (req, res) => {
   try {
     const userId = getUserId(req);
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+
     if (!userId) {
-      return res.status(401).json({ success: false, message: 'Không xác định được người dùng từ token' });
+      return res.status(401).json({
+        success: false,
+        message: 'Không xác định được người dùng từ token',
+      });
     }
-    const posts = await postService.getHiddenPosts(userId);
+
+    const result = await postService.getHiddenPosts(userId, page, limit);
+
     res.status(200).json({
       success: true,
-      data: posts,
+      data: result.posts,
+      hasMore: result.hasMore,
+      total: result.total,
+      page,
+      limit,
     });
   } catch (err) {
-    console.error(err.message);
+    console.    error(err.message);
     if (err.statusCode) {
       return res.status(err.statusCode).json({ success: false, message: err.message });
     }
@@ -524,6 +569,7 @@ module.exports = {
   deletePost,
   hidePost,
   getHiddenPosts,
+  getUserPosts,
   updateComment,
   deleteComment,
   acceptAnswer,

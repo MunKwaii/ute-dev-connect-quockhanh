@@ -177,6 +177,67 @@ const getAllPosts = async (page = 1, limit = 5, currentUserId = null) => {
   }
 };
 
+const getUserPosts = async (targetUserId, page = 1, limit = 5, currentUserId = null) => {
+  try {
+    const skip = (page - 1) * limit;
+
+    let filter = { 
+      user: targetUserId,
+      group: null,
+      isDeleted: { $ne: true },
+      isHidden: { $ne: true }
+    };
+
+    if (currentUserId && currentUserId.toString() !== targetUserId.toString()) {
+      const user = await User.findById(currentUserId);
+      if (user) {
+        const followingIds = user.following.map(f => f.user?.toString());
+        const followerIds = user.followers.map(f => f.user?.toString());
+        const friendIds = followingIds.filter(id => 
+          followerIds.some(fId => fId === id)
+        );
+
+        filter.$or = [
+          { visibility: 'public' },
+          { visibility: { $exists: false } }
+        ];
+
+        if (followingIds.includes(targetUserId.toString())) {
+          filter.$or.push({ visibility: 'followers' });
+        }
+        if (friendIds.includes(targetUserId.toString())) {
+          filter.$or.push({ visibility: 'friends' });
+        }
+      } else {
+        filter.visibility = 'public';
+      }
+    } else if (!currentUserId) {
+      filter.$or = [
+        { visibility: 'public' },
+        { visibility: { $exists: false } }
+      ];
+    }
+    // If currentUserId === targetUserId, no visibility filter needed (can see all own posts)
+
+    const posts = await Post.find(filter)
+      .populate('user', 'name avatar reputation')
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Post.countDocuments(filter);
+    const hasMore = total > skip + posts.length;
+
+    return {
+      posts,
+      hasMore,
+      total,
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
 const getTopTrendingPosts = async (currentUserId = null) => {
   try {
     let matchFilter = {
@@ -280,10 +341,12 @@ const toggleSavePost = async (userId, postId) => {
   };
 };
 
-const getSavedPosts = async (userId) => {
+const getSavedPosts = async (userId, page = 1, limit = 10) => {
+  const skip = (page - 1) * limit;
   const user = await User.findById(userId).populate({
     path: 'savedPosts',
-    options: { sort: { date: -1 } },
+    options: { sort: { date: -1 }, skip, limit },
+    populate: { path: 'user', select: 'name avatar reputation' }
   });
 
   if (!user) {
@@ -292,7 +355,14 @@ const getSavedPosts = async (userId) => {
     throw error;
   }
 
-  return user.savedPosts;
+  const userDoc = await User.findById(userId);
+  const totalItems = userDoc.savedPosts.length;
+
+  return {
+    posts: user.savedPosts,
+    total: totalItems,
+    hasMore: skip + user.savedPosts.length < totalItems
+  };
 };
 
 // Like / Unlike bài viết dạng toggle
@@ -524,17 +594,27 @@ const toggleHidePost = async (postId, userId) => {
   }
 };
 
-const getHiddenPosts = async (userId) => {
+const getHiddenPosts = async (userId, page = 1, limit = 10) => {
   try {
-    const posts = await Post.find({
+    const skip = (page - 1) * limit;
+    const query = {
       user: userId,
       isHidden: true,
       isDeleted: { $ne: true }
-    })
-    .populate('user', 'name avatar reputation')
-    .sort({ date: -1 });
+    };
 
-    return posts;
+    const total = await Post.countDocuments(query);
+    const posts = await Post.find(query)
+      .populate('user', 'name avatar reputation')
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    return {
+      posts,
+      total,
+      hasMore: skip + posts.length < total
+    };
   } catch (error) {
     throw error;
   }
@@ -762,6 +842,7 @@ module.exports = {
   deletePost,
   toggleHidePost,
   getHiddenPosts,
+  getUserPosts,
   updateComment,
   deleteComment,
   acceptAnswer,

@@ -91,6 +91,14 @@ const PostSchema = new Schema({
           }
         }
       ],
+      disapprovals: [
+        {
+          user: {
+            type: Schema.Types.ObjectId,
+            ref: 'user'
+          }
+        }
+      ],
       name: {
         type: String
       },

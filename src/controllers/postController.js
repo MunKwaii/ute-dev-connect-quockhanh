@@ -501,6 +501,26 @@ const approveComment = async (req, res) => {
   }
 };
 
+// @desc    Phản đối bình luận (Downvote / Disapprove Comment)
+const disapproveComment = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const comments = await postService.disapproveComment(req.params.id, req.params.comment_id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Cập nhật trạng thái phản đối bình luận thành công',
+      data: comments,
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
 // @desc    Ẩn / Hiện bài viết
 const hidePost = async (req, res) => {
   try {
@@ -548,7 +568,7 @@ const getHiddenPosts = async (req, res) => {
       limit,
     });
   } catch (err) {
-    console.    error(err.message);
+    console.error(err.message);
     if (err.statusCode) {
       return res.status(err.statusCode).json({ success: false, message: err.message });
     }
@@ -574,4 +594,5 @@ module.exports = {
   deleteComment,
   acceptAnswer,
   approveComment,
+  disapproveComment,
 };

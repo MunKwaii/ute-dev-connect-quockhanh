@@ -1,5 +1,6 @@
 const profileService = require('../services/profileService');
 const User = require('../models/User');
+const Post = require('../models/Post');
 const notificationService = require('../services/notificationService');
 const { uploadToCloudinary } = require('../utils/cloudinary');
 const fs = require('fs');
@@ -317,6 +318,19 @@ const updateAvatar = async (req, res) => {
         if (!user) {
             return res.status(404).json({ msg: 'Không tìm thấy người dùng' });
         }
+
+        // ĐỒNG BỘ: Cập nhật ảnh đại diện trong tất cả bài đăng của user này
+        await Post.updateMany(
+            { user: userId },
+            { $set: { avatar: avatarUrl } }
+        );
+
+        // ĐỒNG BỘ: Cập nhật ảnh đại diện trong tất cả bình luận của user này
+        await Post.updateMany(
+            { "comments.user": userId },
+            { $set: { "comments.$[elem].avatar": avatarUrl } },
+            { arrayFilters: [{ "elem.user": userId }] }
+        );
 
         return res.status(200).json({
             msg: 'Cập nhật ảnh đại diện thành công',

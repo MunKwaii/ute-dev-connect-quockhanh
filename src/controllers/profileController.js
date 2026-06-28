@@ -351,6 +351,51 @@ const updateAvatar = async (req, res) => {
     }
 };
 
+/**
+ * Controller: Xóa ảnh đại diện của user (quay về mặc định)
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ */
+const deleteAvatar = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const defaultAvatarUrl = '';
+
+        // Cập nhật trường avatar trong bảng User thành rỗng
+        const user = await User.findByIdAndUpdate(
+            userId,
+            { avatar: defaultAvatarUrl },
+            { new: true }
+        ).select('-password');
+
+        if (!user) {
+            return res.status(404).json({ msg: 'Không tìm thấy người dùng' });
+        }
+
+        // ĐỒNG BỘ: Cập nhật ảnh đại diện trong tất cả bài đăng của user này
+        await Post.updateMany(
+            { user: userId },
+            { $set: { avatar: defaultAvatarUrl } }
+        );
+
+        // ĐỒNG BỘ: Cập nhật ảnh đại diện trong tất cả bình luận của user này
+        await Post.updateMany(
+            { "comments.user": userId },
+            { $set: { "comments.$[elem].avatar": defaultAvatarUrl } },
+            { arrayFilters: [{ "elem.user": userId }] }
+        );
+
+        return res.status(200).json({
+            msg: 'Xóa ảnh đại diện thành công',
+            avatar: user.avatar,
+            user
+        });
+    } catch (error) {
+        console.error('Lỗi ở deleteAvatar controller:', error.message);
+        return res.status(500).json({ msg: 'Lỗi máy chủ (Server Error)' });
+    }
+};
+
 module.exports = {
     editProfile,
     getCurrentProfile,
@@ -361,6 +406,7 @@ module.exports = {
     unfollowUser,
     getFollowers,
     getFollowing,
-    updateAvatar
+    updateAvatar,
+    deleteAvatar
 };
 

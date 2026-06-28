@@ -25,6 +25,11 @@ router.put('/profile', verifyToken, profileLimiter, validateEditProfile, profile
 // @access  Private
 router.put('/profile/avatar', verifyToken, upload.single('avatar'), profileController.updateAvatar);
 
+// @route   DELETE /api/profile/avatar
+// @desc    Xóa ảnh đại diện của user (quay về mặc định)
+// @access  Private
+router.delete('/profile/avatar', verifyToken, profileController.deleteAvatar);
+
 // @route   GET /api/profile/me
 // @desc    Lấy hồ sơ của người dùng hiện tại
 // @access  Private

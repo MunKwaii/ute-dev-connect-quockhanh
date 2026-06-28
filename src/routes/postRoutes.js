@@ -129,4 +129,9 @@ router.delete('/:id', verifyToken, postController.deletePost);
 // @access  Public
 router.get('/:id', optionalToken, postController.getPost);
 
+// @route   GET /api/posts/user/:userId
+// @desc    Lấy bài viết của người dùng
+// @access  Public
+router.get('/user/:userId', optionalToken, postController.getUserPosts);
+
 module.exports = router;

@@ -23,14 +23,23 @@ const createNotification = async (recipientId, senderId, type, postId = null) =>
   }
 };
 
-const getNotifications = async (userId) => {
+const getNotifications = async (userId, page = 1, limit = 20) => {
   try {
+    const skip = (page - 1) * limit;
+    
+    const total = await Notification.countDocuments({ recipient: userId });
     const notifications = await Notification.find({ recipient: userId })
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate('sender', 'name avatar')
-      .populate('post', 'text'); // Optional: populate post to show some text if needed
+      .populate('post', 'text');
     
-    return notifications;
+    return {
+      notifications,
+      total,
+      hasMore: skip + notifications.length < total
+    };
   } catch (error) {
     throw error;
   }

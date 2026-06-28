@@ -3,10 +3,17 @@ const notificationService = require('../services/notificationService');
 // @desc    Lấy danh sách thông báo
 const getNotifications = async (req, res) => {
   try {
-    const notifications = await notificationService.getNotifications(req.user.id);
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+
+    const result = await notificationService.getNotifications(req.user.id, page, limit);
     res.status(200).json({
       success: true,
-      data: notifications
+      data: result.notifications,
+      total: result.total,
+      hasMore: result.hasMore,
+      page,
+      limit
     });
   } catch (err) {
     console.error(err.message);

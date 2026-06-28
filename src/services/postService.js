@@ -834,9 +834,11 @@ const approveComment = async (postId, commentId, userId) => {
 
 // Phản đối bình luận (Downvote / Disapprove Comment)
 const disapproveComment = async (postId, commentId, userId) => {
+  console.log(`[postService.disapproveComment] Khởi tạo. Post: ${postId}, Comment: ${commentId}, User: ${userId}`);
   try {
     const post = await Post.findById(postId);
     if (!post) {
+      console.log(`[postService.disapproveComment] LỖI: Không tìm thấy bài viết ${postId}`);
       const error = new Error('Bài viết không tồn tại');
       error.statusCode = 404;
       throw error;

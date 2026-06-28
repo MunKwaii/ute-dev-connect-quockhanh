@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { check } = require('express-validator');
 
-const { verifyToken } = require('../middlewares/authMiddleware');
+const { verifyToken, optionalToken } = require('../middlewares/authMiddleware');
 const groupController = require('../controllers/groupController');
 const Group = require('../models/Group');
 
@@ -74,17 +74,21 @@ router.post(
 // @route   GET /api/groups/:id
 // @desc    Lấy chi tiết nhóm theo ID
 // @access  Public (nhưng trả thêm isMember nếu đã đăng nhập)
-router.get('/:id', groupController.getGroupById);
+router.get('/:id', optionalToken, groupController.getGroupById);
 
 // @route   PUT /api/groups/:id/join
 // @desc    Tham gia nhóm
 // @access  Private
 router.put('/:id/join', verifyToken, groupController.joinGroup);
+router.get('/:id/join-requests', verifyToken, groupController.getJoinRequests);
+router.put('/:id/join-requests/:userId/approve', verifyToken, groupController.approveJoinRequest);
+router.put('/:id/join-requests/:userId/reject', verifyToken, groupController.rejectJoinRequest);
 
 // @route   PUT /api/groups/:id/leave
 // @desc    Rời nhóm
 // @access  Private
 router.put('/:id/leave', verifyToken, groupController.leaveGroup);
+router.put('/:id/transfer-admin', verifyToken, groupController.transferAdmin);
 
 // @route   DELETE /api/groups/:id
 // @desc    Xóa nhóm (soft delete, chỉ admin nhóm)

@@ -2,10 +2,84 @@ const Group = require('../models/Group');
 const Post = require('../models/Post');
 const User = require('../models/User');
 
+const toIdString = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  if (value._id) {
+    return value._id.toString();
+  }
+
+  return value.toString();
+};
+
+const ensureJoinRequests = (group) => {
+  if (!Array.isArray(group.joinRequests)) {
+    group.joinRequests = [];
+  }
+
+  return group.joinRequests;
+};
+
+const isGroupAdmin = (group, userId) => {
+  return toIdString(group.admin) === toIdString(userId);
+};
+
+const isGroupModerator = (group, userId) => {
+  return Array.isArray(group.moderators) && group.moderators.some(
+    (moderator) => toIdString(moderator) === toIdString(userId)
+  );
+};
+
+const canManageGroup = (group, userId) => {
+  return isGroupAdmin(group, userId) || isGroupModerator(group, userId);
+};
+
+const getActiveGroupOrThrow = async (groupId) => {
+  const group = await Group.findOne({ _id: groupId, isActive: true });
+
+  if (!group) {
+    const err = new Error('Nhóm không tồn tại');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  return group;
+};
+
+const getPopulatedGroupById = async (groupId) => {
+  return Group.findById(groupId)
+    .select('-joinRequests')
+    .populate('admin', 'name avatar email reputation')
+    .populate('moderators', 'name avatar email reputation')
+    .populate('members.user', 'name avatar email reputation');
+};
+
+const findLatestJoinRequest = (group, userId) => {
+  const targetUserId = toIdString(userId);
+  const requests = ensureJoinRequests(group);
+
+  for (let index = requests.length - 1; index >= 0; index -= 1) {
+    const request = requests[index];
+    if (request.user && toIdString(request.user) === targetUserId) {
+      return request;
+    }
+  }
+
+  return null;
+};
+
+const findPendingJoinRequest = (group, userId) => {
+  return ensureJoinRequests(group).find(
+    (request) => request.user && toIdString(request.user) === toIdString(userId) && request.status === 'pending'
+  );
+};
+
 // Helper: kiểm tra userId có phải thành viên của nhóm không
 const isMember = (group, userId) => {
-  return group.members.some(
-    (m) => m.user.toString() === userId.toString()
+  return Array.isArray(group.members) && group.members.some(
+    (m) => m.user && toIdString(m.user) === toIdString(userId)
   );
 };
 
@@ -48,6 +122,7 @@ const getAllGroups = async (page = 1, limit = 10, keyword = '') => {
   }
 
   const groups = await Group.find(filter)
+    .select('-joinRequests')
     .populate('admin', 'name avatar')
     .sort({ date: -1 })
     .skip(skip)
@@ -64,6 +139,7 @@ const getAllGroups = async (page = 1, limit = 10, keyword = '') => {
  */
 const getGroupById = async (groupId, userId) => {
   const group = await Group.findOne({ _id: groupId, isActive: true })
+    .select('-joinRequests')
     .populate('admin', 'name avatar')
     .populate('members.user', 'name avatar')
     .populate('moderators', 'name avatar');
@@ -77,8 +153,8 @@ const getGroupById = async (groupId, userId) => {
   return {
     ...group.toObject(),
     isMember: userId ? isMember(group, userId) : false,
-    isAdmin: userId ? group.admin._id.toString() === userId.toString() : false,
-    isMod: userId ? group.moderators && group.moderators.some(m => (m._id || m).toString() === userId.toString()) : false,
+    isAdmin: userId ? isGroupAdmin(group, userId) : false,
+    isMod: userId ? isGroupModerator(group, userId) : false,
     membersCount: group.members.length,
   };
 };
@@ -87,7 +163,7 @@ const getGroupById = async (groupId, userId) => {
  * Tham gia nhóm
  */
 const joinGroup = async (groupId, userId) => {
-  const group = await Group.findOne({ _id: groupId, isActive: true });
+  const group = await getActiveGroupOrThrow(groupId);
 
   if (!group) {
     const err = new Error('Nhóm không tồn tại');
@@ -101,10 +177,30 @@ const joinGroup = async (groupId, userId) => {
     throw err;
   }
 
-  group.members.push({ user: userId });
-  await group.save();
+  const pendingRequest = findPendingJoinRequest(group, userId);
+  if (pendingRequest) {
+    const err = new Error('Yêu cầu tham gia nhóm đang chờ duyệt');
+    err.statusCode = 400;
+    throw err;
+  }
 
-  return { message: 'Tham gia nhóm thành công', membersCount: group.members.length };
+  const existingRequest = findLatestJoinRequest(group, userId);
+  if (existingRequest) {
+    existingRequest.status = 'pending';
+    existingRequest.requestedAt = new Date();
+  } else {
+    ensureJoinRequests(group).push({
+      user: userId,
+      requestedAt: new Date(),
+      status: 'pending'
+    });
+  }
+  await group.save();
+  return {
+    message: 'Đã gửi yêu cầu tham gia nhóm, vui lòng chờ duyệt',
+    status: 'pending',
+    membersCount: group.members.length
+  };
 };
 
 /**
@@ -112,7 +208,7 @@ const joinGroup = async (groupId, userId) => {
  * - Admin không được rời nếu vẫn còn thành viên khác (phải xóa nhóm hoặc transfer)
  */
 const leaveGroup = async (groupId, userId) => {
-  const group = await Group.findOne({ _id: groupId, isActive: true });
+  const group = await getActiveGroupOrThrow(groupId);
 
   if (!group) {
     const err = new Error('Nhóm không tồn tại');
@@ -126,7 +222,7 @@ const leaveGroup = async (groupId, userId) => {
     throw err;
   }
 
-  const isAdmin = group.admin.toString() === userId.toString();
+  const isAdmin = isGroupAdmin(group, userId);
   if (isAdmin && group.members.length > 1) {
     const err = new Error('Admin không thể rời nhóm khi còn thành viên khác. Hãy xóa nhóm hoặc chuyển quyền admin.');
     err.statusCode = 400;
@@ -134,8 +230,14 @@ const leaveGroup = async (groupId, userId) => {
   }
 
   group.members = group.members.filter(
-    (m) => m.user.toString() !== userId.toString()
+    (m) => toIdString(m.user) !== toIdString(userId)
   );
+
+  if (Array.isArray(group.moderators)) {
+    group.moderators = group.moderators.filter(
+      (moderator) => toIdString(moderator) !== toIdString(userId)
+    );
+  }
   await group.save();
 
   return { message: 'Rời nhóm thành công', membersCount: group.members.length };
@@ -145,7 +247,7 @@ const leaveGroup = async (groupId, userId) => {
  * Soft delete nhóm (chỉ admin nhóm mới được xóa)
  */
 const deleteGroup = async (groupId, userId) => {
-  const group = await Group.findOne({ _id: groupId, isActive: true });
+  const group = await getActiveGroupOrThrow(groupId);
 
   if (!group) {
     const err = new Error('Nhóm không tồn tại');
@@ -153,7 +255,7 @@ const deleteGroup = async (groupId, userId) => {
     throw err;
   }
 
-  if (group.admin.toString() !== userId.toString()) {
+  if (!isGroupAdmin(group, userId)) {
     const err = new Error('Chỉ admin nhóm mới có quyền xóa nhóm');
     err.statusCode = 403;
     throw err;
@@ -193,11 +295,148 @@ const getGroupFeed = async (groupId, userId, page = 1, limit = 10) => {
   return { posts, total, hasMore };
 };
 
+const getJoinRequests = async (groupId, userId) => {
+  const group = await Group.findOne({ _id: groupId, isActive: true })
+    .populate('joinRequests.user', 'name avatar email reputation');
+
+  if (!group) {
+    const err = new Error('Nhóm không tồn tại');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (!canManageGroup(group, userId)) {
+    const err = new Error('Chỉ admin hoặc kiểm duyệt viên mới có quyền xem yêu cầu tham gia nhóm');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  return ensureJoinRequests(group).filter(
+    (request) => request.status === 'pending' && request.user
+  );
+};
+
+const approveJoinRequest = async (groupId, managerId, targetUserId) => {
+  if (!targetUserId) {
+    const err = new Error('Thiếu người dùng cần duyệt');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const group = await getActiveGroupOrThrow(groupId);
+
+  if (!canManageGroup(group, managerId)) {
+    const err = new Error('Chỉ admin hoặc kiểm duyệt viên mới có quyền duyệt thành viên');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const pendingRequest = findPendingJoinRequest(group, targetUserId);
+  if (!pendingRequest) {
+    const err = new Error('Không tìm thấy yêu cầu tham gia đang chờ duyệt');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (!isMember(group, targetUserId)) {
+    group.members.push({ user: targetUserId });
+  }
+
+  pendingRequest.status = 'approved';
+  await group.save();
+
+  return {
+    message: 'Đã duyệt yêu cầu tham gia nhóm thành công',
+    membersCount: group.members.length
+  };
+};
+
+const rejectJoinRequest = async (groupId, managerId, targetUserId) => {
+  if (!targetUserId) {
+    const err = new Error('Thiếu người dùng cần từ chối');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const group = await getActiveGroupOrThrow(groupId);
+
+  if (!canManageGroup(group, managerId)) {
+    const err = new Error('Chỉ admin hoặc kiểm duyệt viên mới có quyền từ chối thành viên');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const pendingRequest = findPendingJoinRequest(group, targetUserId);
+  if (!pendingRequest) {
+    const err = new Error('Không tìm thấy yêu cầu tham gia đang chờ duyệt');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  pendingRequest.status = 'rejected';
+  await group.save();
+
+  return { message: 'Đã từ chối yêu cầu tham gia nhóm' };
+};
+
+const transferAdmin = async (groupId, currentAdminId, newAdminId) => {
+  if (!newAdminId) {
+    const err = new Error('Thiếu admin mới');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const group = await getActiveGroupOrThrow(groupId);
+
+  if (!isGroupAdmin(group, currentAdminId)) {
+    const err = new Error('Chỉ admin hiện tại mới có quyền chuyển quyền admin');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  if (toIdString(currentAdminId) === toIdString(newAdminId)) {
+    const err = new Error('Không thể chuyển quyền admin cho chính mình');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!isMember(group, newAdminId)) {
+    const err = new Error('Admin mới phải là thành viên của nhóm');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const previousAdminId = group.admin;
+  group.admin = newAdminId;
+
+  if (!Array.isArray(group.moderators)) {
+    group.moderators = [];
+  }
+
+  if (!isGroupModerator(group, previousAdminId)) {
+    group.moderators.push(previousAdminId);
+  }
+
+  group.moderators = group.moderators.filter(
+    (moderator) => toIdString(moderator) !== toIdString(newAdminId)
+  );
+
+  await group.save();
+
+  return getPopulatedGroupById(group._id);
+};
+
 /**
  * Thăng chức / hạ chức Moderator (kiểm duyệt viên)
  */
 const toggleModerator = async (groupId, adminId, targetUserId) => {
-  const group = await Group.findOne({ _id: groupId, isActive: true });
+  if (!targetUserId) {
+    const err = new Error('Thiếu người dùng cần cập nhật quyền moderator');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const group = await getActiveGroupOrThrow(groupId);
   if (!group) {
     const err = new Error('Nhóm không tồn tại');
     err.statusCode = 404;
@@ -205,21 +444,21 @@ const toggleModerator = async (groupId, adminId, targetUserId) => {
   }
 
   // 1. Kiểm tra xem người gọi có phải admin nhóm không
-  if (group.admin.toString() !== adminId.toString()) {
+  if (!isGroupAdmin(group, adminId)) {
     const err = new Error('Chỉ admin nhóm mới có quyền thăng chức/bãi chức kiểm duyệt viên');
     err.statusCode = 403;
     throw err;
   }
 
   // 2. Không được tự thăng chức/hạ chức chính mình
-  if (targetUserId.toString() === adminId.toString()) {
+  if (toIdString(targetUserId) === toIdString(group.admin)) {
     const err = new Error('Không thể thăng chức/bãi chức chủ nhóm');
     err.statusCode = 400;
     throw err;
   }
 
   // 3. Kiểm tra xem targetUserId có phải thành viên nhóm không
-  const isTargetMember = group.members.some(m => m.user.toString() === targetUserId.toString());
+  const isTargetMember = isMember(group, targetUserId);
   if (!isTargetMember) {
     const err = new Error('Người dùng không phải thành viên của nhóm này');
     err.statusCode = 400;
@@ -230,7 +469,9 @@ const toggleModerator = async (groupId, adminId, targetUserId) => {
     group.moderators = [];
   }
 
-  const modIndex = group.moderators.findIndex(m => m.toString() === targetUserId.toString());
+  const modIndex = group.moderators.findIndex(
+    (m) => toIdString(m) === toIdString(targetUserId)
+  );
   let action = '';
 
   if (modIndex === -1) {
@@ -249,17 +490,14 @@ const toggleModerator = async (groupId, adminId, targetUserId) => {
  * Lấy danh sách bài đăng chờ duyệt (chỉ admin / mod)
  */
 const getPendingPosts = async (groupId, userId) => {
-  const group = await Group.findOne({ _id: groupId, isActive: true });
+  const group = await getActiveGroupOrThrow(groupId);
   if (!group) {
     const err = new Error('Nhóm không tồn tại');
     err.statusCode = 404;
     throw err;
   }
 
-  const isAdmin = group.admin.toString() === userId.toString();
-  const isMod = group.moderators && group.moderators.some(m => m.toString() === userId.toString());
-
-  if (!isAdmin && !isMod) {
+  if (!canManageGroup(group, userId)) {
     const err = new Error('Chỉ admin hoặc kiểm duyệt viên mới có quyền xem bài viết chờ duyệt');
     err.statusCode = 403;
     throw err;
@@ -276,17 +514,14 @@ const getPendingPosts = async (groupId, userId) => {
  * Phê duyệt / từ chối bài viết (chỉ admin / mod)
  */
 const updatePostStatus = async (groupId, postId, userId, status) => {
-  const group = await Group.findOne({ _id: groupId, isActive: true });
+  const group = await getActiveGroupOrThrow(groupId);
   if (!group) {
     const err = new Error('Nhóm không tồn tại');
     err.statusCode = 404;
     throw err;
   }
 
-  const isAdmin = group.admin.toString() === userId.toString();
-  const isMod = group.moderators && group.moderators.some(m => m.toString() === userId.toString());
-
-  if (!isAdmin && !isMod) {
+  if (!canManageGroup(group, userId)) {
     const err = new Error('Chỉ admin hoặc kiểm duyệt viên mới có quyền duyệt bài viết');
     err.statusCode = 403;
     throw err;
@@ -321,7 +556,14 @@ module.exports = {
   leaveGroup,
   deleteGroup,
   getGroupFeed,
+  getJoinRequests,
+  approveJoinRequest,
+  rejectJoinRequest,
+  transferAdmin,
   isMember,
+  isGroupAdmin,
+  isGroupModerator,
+  canManageGroup,
   toggleModerator,
   getPendingPosts,
   updatePostStatus,

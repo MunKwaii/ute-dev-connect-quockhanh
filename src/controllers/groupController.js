@@ -76,7 +76,12 @@ const joinGroup = async (req, res) => {
     const userId = getUserId(req);
     const result = await groupService.joinGroup(req.params.id, userId);
 
-    res.status(200).json({ success: true, message: result.message, membersCount: result.membersCount });
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      status: result.status,
+      membersCount: result.membersCount
+    });
   } catch (err) {
     console.error(err.message);
     if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
@@ -193,6 +198,75 @@ const addGroupComment = async (req, res) => {
   }
 };
 
+// @desc    Lấy danh sách yêu cầu tham gia nhóm
+// @access  Private
+const getJoinRequests = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const requests = await groupService.getJoinRequests(req.params.id, userId);
+
+    res.status(200).json({
+      success: true,
+      data: requests
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+const approveJoinRequest = async (req, res) => {
+  try {
+    const managerId = getUserId(req);
+    const result = await groupService.approveJoinRequest(req.params.id, managerId, req.params.userId);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      membersCount: result.membersCount
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+const rejectJoinRequest = async (req, res) => {
+  try {
+    const managerId = getUserId(req);
+    const result = await groupService.rejectJoinRequest(req.params.id, managerId, req.params.userId);
+
+    res.status(200).json({
+      success: true,
+      message: result.message
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
+const transferAdmin = async (req, res) => {
+  try {
+    const currentAdminId = getUserId(req);
+    const { newAdminId } = req.body;
+    const group = await groupService.transferAdmin(req.params.id, currentAdminId, newAdminId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Chuyển quyền admin nhóm thành công',
+      data: group
+    });
+  } catch (err) {
+    console.error(err.message);
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Lỗi Server' });
+  }
+};
+
 // @desc    Thăng chức / hạ chức Moderator (kiểm duyệt viên)
 // @access  Private
 const toggleModerator = async (req, res) => {
@@ -266,6 +340,10 @@ module.exports = {
   getGroupFeed,
   createGroupPost,
   addGroupComment,
+  getJoinRequests,
+  approveJoinRequest,
+  rejectJoinRequest,
+  transferAdmin,
   toggleModerator,
   getPendingPosts,
   updatePostStatus,

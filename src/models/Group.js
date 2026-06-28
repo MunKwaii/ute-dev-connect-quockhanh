@@ -41,6 +41,23 @@ const GroupSchema = new Schema({
       }
     }
   ],
+  joinRequests: [
+    {
+      user: {
+        type: Schema.Types.ObjectId,
+        ref: 'user'
+      },
+      requestedAt: {
+        type: Date,
+        default: Date.now
+      },
+      status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+      }
+    }
+  ],
   // Tag công nghệ của nhóm (vd: 'react', 'nodejs')
   tags: {
     type: [String],
